@@ -1,0 +1,1280 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import React, { useState, useEffect, useCallback, useMemo } from 'react'
+     4→     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→     5→import { useOSStore, type WindowId } from '@/store/useOSStore'
+     6→     6→import { useSound } from '@/hooks/useSound'
+     7→     7→import { useKonamiCode } from '@/hooks/useKonamiCode'
+     8→     8→import PixelWorld from '@/components/world/PixelWorld'
+     9→     9→import Window from '@/components/os/Window'
+    10→    10→import Terminal from '@/components/terminal/Terminal'
+    11→    11→import AIAssistant from '@/components/assistant/AIAssistant'
+    12→    12→import {
+    13→    13→  aboutData,
+    14→    14→  experienceData,
+    15→    15→  projectsData,
+    16→    16→  skillsData,
+    17→    17→  certificationsData,
+    18→    18→  researchData,
+    19→    19→  achievementsData,
+    20→    20→} from '@/lib/portfolio-data'
+    21→    21→
+    22→    22→// ─── Colors ──────────────────────────────────────────────────────────────────────
+    23→    23→
+    24→    24→const COLORS = {
+    25→    25→  bg: '#050816',
+    26→    26→  primary: '#00E5FF',
+    27→    27→  secondary: '#6C63FF',
+    28→    28→  accent: '#FF00C8',
+    29→    29→  text: '#FFFFFF',
+    30→    30→  muted: '#94A3B8',
+    31→    31→  green: '#00FF88',
+    32→    32→  yellow: '#FFD700',
+    33→    33→  orange: '#FF6B35',
+    34→    34→}
+    35→    35→
+    36→    36→// ─── Building ID → Window ID mapping ────────────────────────────────────────────
+    37→    37→
+    38→    38→const BUILDING_TO_WINDOW: Record<string, WindowId> = {
+    39→    39→  'ai-lab': 'about',
+    40→    40→  'projects': 'projects',
+    41→    41→  'experience': 'experience',
+    42→    42→  'skills': 'skills',
+    43→    43→  'research': 'research',
+    44→    44→  'contact': 'contact',
+    45→    45→}
+    46→    46→
+    47→    47→// ─── Window config data ──────────────────────────────────────────────────────────
+    48→    48→
+    49→    49→interface WindowConfig {
+    50→    50→  id: WindowId
+    51→    51→  title: string
+    52→    52→  icon: string
+    53→    53→  color: string
+    54→    54→  width: number
+    55→    55→  height: number
+    56→    56→}
+    57→    57→
+    58→    58→const WINDOW_CONFIGS: WindowConfig[] = [
+    59→    59→  { id: 'about', title: 'About Me', icon: '🤖', color: '#00E5FF', width: 680, height: 520 },
+    60→    60→  { id: 'experience', title: 'Experience', icon: '💼', color: '#FF00C8', width: 720, height: 540 },
+    61→    61→  { id: 'projects', title: 'Projects', icon: '🚀', color: '#6C63FF', width: 740, height: 560 },
+    62→    62→  { id: 'skills', title: 'Skills', icon: '⚡', color: '#00FF88', width: 720, height: 560 },
+    63→    63→  { id: 'certifications', title: 'Certifications', icon: '🎓', color: '#00B4D8', width: 680, height: 480 },
+    64→    64→  { id: 'research', title: 'Research', icon: '🔬', color: '#FFD700', width: 700, height: 500 },
+    65→    65→  { id: 'resume', title: 'Resume', icon: '📄', color: '#94A3B8', width: 600, height: 460 },
+    66→    66→  { id: 'contact', title: 'Contact', icon: '📡', color: '#FF6B35', width: 600, height: 480 },
+    67→    67→  { id: 'terminal', title: 'Terminal', icon: '💻', color: '#00E5FF', width: 700, height: 480 },
+    68→    68→  { id: 'achievements', title: 'Achievements', icon: '🏆', color: '#FFD700', width: 660, height: 480 },
+    69→    69→  { id: 'secret', title: '⛔ Secret Room', icon: '🔒', color: '#FF00C8', width: 600, height: 440 },
+    70→    70→  { id: 'snake', title: 'Snake Game', icon: '🐍', color: '#00FF88', width: 500, height: 500 },
+    71→    71→  { id: 'settings', title: 'Settings', icon: '⚙️', color: '#94A3B8', width: 560, height: 440 },
+    72→    72→]
+    73→    73→
+    74→    74→function getWindowConfig(id: WindowId): WindowConfig {
+    75→    75→  return WINDOW_CONFIGS.find(c => c.id === id) || WINDOW_CONFIGS[0]
+    76→    76→}
+    77→    77→
+    78→    78→// ─── Section Header Component ────────────────────────────────────────────────────
+    79→    79→
+    80→    80→function SectionHeader({ title, icon, color, subtitle }: { title: string; icon: string; color: string; subtitle?: string }) {
+    81→    81→  return (
+    82→    82→    <div className="mb-6">
+    83→    83→      <motion.div
+    84→    84→        className="flex items-center gap-3 mb-2"
+    85→    85→        initial={{ opacity: 0, x: -20 }}
+    86→    86→        animate={{ opacity: 1, x: 0 }}
+    87→    87→        transition={{ duration: 0.4 }}
+    88→    88→      >
+    89→    89→        <span className="text-2xl">{icon}</span>
+    90→    90→        <h2
+    91→    91→          className="font-orbitron text-lg font-bold tracking-wide"
+    92→    92→          style={{ color, textShadow: `0 0 10px ${color}40` }}
+    93→    93→        >
+    94→    94→          {title}
+    95→    95→        </h2>
+    96→    96→        <motion.div
+    97→    97→          className="flex-1 h-px"
+    98→    98→          style={{ background: `linear-gradient(90deg, ${color}40, transparent)` }}
+    99→    99→          initial={{ scaleX: 0 }}
+   100→   100→          animate={{ scaleX: 1 }}
+   101→   101→          transition={{ duration: 0.6, delay: 0.2 }}
+   102→   102→        />
+   103→   103→      </motion.div>
+   104→   104→      {subtitle && (
+   105→   105→        <motion.p
+   106→   106→          className="font-jetbrains text-xs pl-10"
+   107→   107→          style={{ color: COLORS.muted }}
+   108→   108→          initial={{ opacity: 0 }}
+   109→   109→          animate={{ opacity: 1 }}
+   110→   110→          transition={{ delay: 0.3 }}
+   111→   111→        >
+   112→   112→          {subtitle}
+   113→   113→        </motion.p>
+   114→   114→      )}
+   115→   115→    </div>
+   116→   116→  )
+   117→   117→}
+   118→   118→
+   119→   119→// ─── Glass Card Component ────────────────────────────────────────────────────────
+   120→   120→
+   121→   121→function GlassCard({ children, color, className = '', delay = 0 }: { children: React.ReactNode; color?: string; className?: string; delay?: number }) {
+   122→   122→  return (
+   123→   123→    <motion.div
+   124→   124→      className={`rounded-lg p-4 ${className}`}
+   125→   125→      style={{
+   126→   126→        background: 'rgba(10, 15, 40, 0.6)',
+   127→   127→        backdropFilter: 'blur(8px)',
+   128→   128→        border: color ? `1px solid ${color}25` : '1px solid rgba(148,163,184,0.1)',
+   129→   129→      }}
+   130→   130→      initial={{ opacity: 0, y: 10 }}
+   131→   131→      animate={{ opacity: 1, y: 0 }}
+   132→   132→      transition={{ duration: 0.3, delay }}
+   133→   133→    >
+   134→   134→      {children}
+   135→   135→    </motion.div>
+   136→   136→  )
+   137→   137→}
+   138→   138→
+   139→   139→// ─── About Section ───────────────────────────────────────────────────────────────
+   140→   140→
+   141→   141→function AboutSection() {
+   142→   142→  return (
+   143→   143→    <div className="p-5 h-full overflow-y-auto custom-scrollbar">
+   144→   144→      <SectionHeader title="About Me" icon="🤖" color={COLORS.primary} subtitle="AI Engineer | ML Engineer | GenAI Developer" />
+   145→   145→
+   146→   146→      <div className="space-y-4">
+   147→   147→        {/* Profile Card */}
+   148→   148→        <GlassCard color={COLORS.primary}>
+   149→   149→          <div className="flex items-start gap-4">
+   150→   150→            <div
+   151→   151→              className="w-16 h-16 rounded-lg flex items-center justify-center text-3xl shrink-0"
+   152→   152→              style={{ background: `linear-gradient(135deg, ${COLORS.primary}30, ${COLORS.secondary}30)`, border: `1px solid ${COLORS.primary}30` }}
+   153→   153→            >
+   154→   154→              🧠
+   155→   155→            </div>
+   156→   156→            <div>
+   157→   157→              <h3 className="font-orbitron text-base font-bold" style={{ color: COLORS.primary }}>
+   158→   158→                {aboutData.name}
+   159→   159→              </h3>
+   160→   160→              <p className="font-jetbrains text-xs mt-1" style={{ color: COLORS.muted }}>
+   161→   161→                {aboutData.title}
+   162→   162→              </p>
+   163→   163→              <p className="font-jetbrains text-xs mt-1" style={{ color: COLORS.accent }}>
+   164→   164→                {aboutData.tagline}
+   165→   165→              </p>
+   166→   166→            </div>
+   167→   167→          </div>
+   168→   168→        </GlassCard>
+   169→   169→
+   170→   170→        {/* Career Objective */}
+   171→   171→        <GlassCard color={COLORS.secondary} delay={0.1}>
+   172→   172→          <h4 className="font-orbitron text-xs font-semibold mb-2" style={{ color: COLORS.secondary }}>
+   173→   173→            🚀 Career Objective
+   174→   174→          </h4>
+   175→   175→          <p className="font-jetbrains text-xs leading-relaxed" style={{ color: COLORS.muted }}>
+   176→   176→            {aboutData.careerObjective}
+   177→   177→          </p>
+   178→   178→        </GlassCard>
+   179→   179→
+   180→   180→        {/* Education */}
+   181→   181→        <GlassCard color={COLORS.green} delay={0.15}>
+   182→   182→          <h4 className="font-orbitron text-xs font-semibold mb-2" style={{ color: COLORS.green }}>
+   183→   183→            🎓 Education
+   184→   184→          </h4>
+   185→   185→          <p className="font-jetbrains text-sm font-medium" style={{ color: COLORS.text }}>
+   186→   186→            {aboutData.education.degree}
+   187→   187→          </p>
+   188→   188→          <p className="font-jetbrains text-xs" style={{ color: COLORS.muted }}>
+   189→   189→            {aboutData.education.college}, {aboutData.education.location}
+   190→   190→          </p>
+   191→   191→          <p className="font-jetbrains text-xs" style={{ color: COLORS.primary }}>
+   192→   192→            {aboutData.education.year}
+   193→   193→          </p>
+   194→   194→        </GlassCard>
+   195→   195→
+   196→   196→        {/* Achievements */}
+   197→   197→        <GlassCard color={COLORS.yellow} delay={0.2}>
+   198→   198→          <h4 className="font-orbitron text-xs font-semibold mb-2" style={{ color: COLORS.yellow }}>
+   199→   199→            ⭐ Key Achievements
+   200→   200→          </h4>
+   201→   201→          <div className="grid grid-cols-2 gap-2">
+   202→   202→            {aboutData.achievements.map((a, i) => (
+   203→   203→              <div key={i} className="flex items-center gap-2">
+   204→   204→                <span className="text-xs" style={{ color: COLORS.primary }}>▹</span>
+   205→   205→                <span className="font-jetbrains text-xs" style={{ color: COLORS.muted }}>{a}</span>
+   206→   206→              </div>
+   207→   207→            ))}
+   208→   208→          </div>
+   209→   209→        </GlassCard>
+   210→   210→
+   211→   211→        {/* Soft Skills */}
+   212→   212→        <GlassCard color={COLORS.accent} delay={0.25}>
+   213→   213→          <h4 className="font-orbitron text-xs font-semibold mb-2" style={{ color: COLORS.accent }}>
+   214→   214→            💡 Soft Skills
+   215→   215→          </h4>
+   216→   216→          <div className="flex flex-wrap gap-2">
+   217→   217→            {aboutData.softSkills.map((s, i) => (
+   218→   218→              <span
+   219→   219→                key={i}
+   220→   220→                className="font-jetbrains text-[10px] px-2 py-1 rounded-full"
+   221→   221→                style={{ background: `${COLORS.accent}15`, color: COLORS.accent, border: `1px solid ${COLORS.accent}30` }}
+   222→   222→              >
+   223→   223→                {s}
+   224→   224→              </span>
+   225→   225→            ))}
+   226→   226→          </div>
+   227→   227→        </GlassCard>
+   228→   228→      </div>
+   229→   229→    </div>
+   230→   230→  )
+   231→   231→}
+   232→   232→
+   233→   233→// ─── Experience Section (Timeline) ───────────────────────────────────────────────
+   234→   234→
+   235→   235→function ExperienceSection() {
+   236→   236→  return (
+   237→   237→    <div className="p-5 h-full overflow-y-auto custom-scrollbar">
+   238→   238→      <SectionHeader title="Experience" icon="💼" color={COLORS.accent} subtitle="Professional journey & internships" />
+   239→   239→
+   240→   240→      <div className="relative">
+   241→   241→        {/* Timeline line */}
+   242→   242→        <div
+   243→   243→          className="absolute left-4 top-0 bottom-0 w-px"
+   244→   244→          style={{ background: `linear-gradient(180deg, ${COLORS.accent}60, ${COLORS.secondary}60, transparent)` }}
+   245→   245→        />
+   246→   246→
+   247→   247→        <div className="space-y-5">
+   248→   248→          {experienceData.map((exp, idx) => (
+   249→   249→            <motion.div
+   250→   250→              key={exp.id}
+   251→   251→              className="relative pl-10"
+   252→   252→              initial={{ opacity: 0, x: -20 }}
+   253→   253→              animate={{ opacity: 1, x: 0 }}
+   254→   254→              transition={{ duration: 0.4, delay: idx * 0.15 }}
+   255→   255→            >
+   256→   256→              {/* Timeline dot */}
+   257→   257→              <div
+   258→   258→                className="absolute left-2.5 top-3 w-3 h-3 rounded-full"
+   259→   259→                style={{
+   260→   260→                  background: exp.color,
+   261→   261→                  boxShadow: `0 0 8px ${exp.color}60`,
+   262→   262→                }}
+   263→   263→              />
+   264→   264→
+   265→   265→              <GlassCard color={exp.color} delay={idx * 0.1}>
+   266→   266→                <div className="flex items-start justify-between mb-2">
+   267→   267→                  <div>
+   268→   268→                    <h3 className="font-orbitron text-sm font-bold" style={{ color: exp.color }}>
+   269→   269→                      {exp.role}
+   270→   270→                    </h3>
+   271→   271→                    <p className="font-jetbrains text-xs" style={{ color: COLORS.text }}>
+   272→   272→                      {exp.company}
+   273→   273→                    </p>
+   274→   274→                  </div>
+   275→   275→                  <span
+   276→   276→                    className="font-jetbrains text-[10px] px-2 py-0.5 rounded-full shrink-0"
+   277→   277→                    style={{ background: `${exp.color}20`, color: exp.color, border: `1px solid ${exp.color}30` }}
+   278→   278→                  >
+   279→   279→                    {exp.type}
+   280→   280→                  </span>
+   281→   281→                </div>
+   282→   282→
+   283→   283→                <div className="flex items-center gap-3 mb-3 font-jetbrains text-[10px]" style={{ color: COLORS.muted }}>
+   284→   284→                  <span>📅 {exp.duration}</span>
+   285→   285→                  <span>📍 {exp.location}</span>
+   286→   286→                </div>
+   287→   287→
+   288→   288→                <ul className="space-y-1.5 mb-3">
+   289→   289→                  {exp.responsibilities.map((r, i) => (
+   290→   290→                    <li key={i} className="flex items-start gap-2">
+   291→   291→                      <span className="mt-0.5 text-xs" style={{ color: exp.color }}>▹</span>
+   292→   292→                      <span className="font-jetbrains text-xs" style={{ color: COLORS.muted }}>{r}</span>
+   293→   293→                    </li>
+   294→   294→                  ))}
+   295→   295→                </ul>
+   296→   296→
+   297→   297→                <div className="flex flex-wrap gap-1.5 mb-2">
+   298→   298→                  {exp.tech.map((t, i) => (
+   299→   299→                    <span
+   300→   300→                      key={i}
+   301→   301→                      className="font-jetbrains text-[9px] px-1.5 py-0.5 rounded"
+   302→   302→                      style={{ background: `${exp.color}15`, color: exp.color }}
+   303→   303→                    >
+   304→   304→                      {t}
+   305→   305→                    </span>
+   306→   306→                  ))}
+   307→   307→                </div>
+   308→   308→
+   309→   309→                <div
+   310→   310→                  className="font-jetbrains text-[10px] px-2 py-1.5 rounded mt-2"
+   311→   311→                  style={{ background: `${COLORS.green}10`, border: `1px solid ${COLORS.green}20`, color: COLORS.green }}
+   312→   312→                >
+   313→   313→                  📈 Impact: {exp.impact}
+   314→   314→                </div>
+   315→   315→              </GlassCard>
+   316→   316→            </motion.div>
+   317→   317→          ))}
+   318→   318→        </div>
+   319→   319→      </div>
+   320→   320→    </div>
+   321→   321→  )
+   322→   322→}
+   323→   323→
+   324→   324→// ─── Projects Section (Expandable Cards) ─────────────────────────────────────────
+   325→   325→
+   326→   326→function ProjectsSection() {
+   327→   327→  const [expandedId, setExpandedId] = useState<number | null>(null)
+   328→   328→
+   329→   329→  return (
+   330→   330→    <div className="p-5 h-full overflow-y-auto custom-scrollbar">
+   331→   331→      <SectionHeader title="Projects" icon="🚀" color={COLORS.secondary} subtitle="Featured AI/ML projects" />
+   332→   332→
+   333→   333→      <div className="space-y-4">
+   334→   334→        {projectsData.map((project, idx) => {
+   335→   335→          const isExpanded = expandedId === project.id
+   336→   336→          return (
+   337→   337→            <motion.div
+   338→   338→              key={project.id}
+   339→   339→              initial={{ opacity: 0, y: 15 }}
+   340→   340→              animate={{ opacity: 1, y: 0 }}
+   341→   341→              transition={{ duration: 0.3, delay: idx * 0.12 }}
+   342→   342→            >
+   343→   343→              <GlassCard
+   344→   344→                color={project.color}
+   345→   345→                className="cursor-pointer"
+   346→   346→                delay={idx * 0.08}
+   347→   347→              >
+   348→   348→                {/* Header row */}
+   349→   349→                <div
+   350→   350→                  className="flex items-center justify-between"
+   351→   351→                  onClick={() => setExpandedId(isExpanded ? null : project.id)}
+   352→   352→                >
+   353→   353→                  <div className="flex items-center gap-3">
+   354→   354→                    <span className="text-xl">{project.icon}</span>
+   355→   355→                    <div>
+   356→   356→                      <h3 className="font-orbitron text-sm font-bold" style={{ color: project.color }}>
+   357→   357→                        {project.title}
+   358→   358→                      </h3>
+   359→   359→                      <p className="font-jetbrains text-xs" style={{ color: COLORS.muted }}>
+   360→   360→                        {project.description}
+   361→   361→                      </p>
+   362→   362→                    </div>
+   363→   363→                  </div>
+   364→   364→                  <motion.span
+   365→   365→                    className="font-jetbrains text-lg"
+   366→   366→                    style={{ color: project.color }}
+   367→   367→                    animate={{ rotate: isExpanded ? 180 : 0 }}
+   368→   368→                    transition={{ duration: 0.2 }}
+   369→   369→                  >
+   370→   370→                    ▾
+   371→   371→                  </motion.span>
+   372→   372→                </div>
+   373→   373→
+   374→   374→                {/* Metrics bar */}
+   375→   375→                <div className="flex items-center gap-3 mt-3">
+   376→   376→                  {Object.entries(project.metrics).map(([key, value]) => (
+   377→   377→                    <div
+   378→   378→                      key={key}
+   379→   379→                      className="font-jetbrains text-[10px] px-2 py-1 rounded"
+   380→   380→                      style={{ background: `${project.color}15`, color: project.color, border: `1px solid ${project.color}20` }}
+   381→   381→                    >
+   382→   382→                      {key.replace(/([A-Z])/g, ' $1').trim()}: <span className="font-semibold">{String(value)}</span>
+   383→   383→                    </div>
+   384→   384→                  ))}
+   385→   385→                </div>
+   386→   386→
+   387→   387→                {/* Expanded content */}
+   388→   388→                <AnimatePresence>
+   389→   389→                  {isExpanded && (
+   390→   390→                    <motion.div
+   391→   391→                      initial={{ height: 0, opacity: 0 }}
+   392→   392→                      animate={{ height: 'auto', opacity: 1 }}
+   393→   393→                      exit={{ height: 0, opacity: 0 }}
+   394→   394→                      transition={{ duration: 0.3 }}
+   395→   395→                      className="overflow-hidden"
+   396→   396→                    >
+   397→   397→                      <div className="pt-4 mt-4 space-y-3" style={{ borderTop: `1px solid ${project.color}20` }}>
+   398→   398→                        <div>
+   399→   399→                          <h4 className="font-orbitron text-[10px] font-semibold mb-1" style={{ color: project.color }}>
+   400→   400→                            OVERVIEW
+   401→   401→                          </h4>
+   402→   402→                          <p className="font-jetbrains text-xs" style={{ color: COLORS.muted }}>{project.overview}</p>
+   403→   403→                        </div>
+   404→   404→                        <div>
+   405→   405→                          <h4 className="font-orbitron text-[10px] font-semibold mb-1" style={{ color: project.color }}>
+   406→   406→                            PROBLEM
+   407→   407→                          </h4>
+   408→   408→                          <p className="font-jetbrains text-xs" style={{ color: COLORS.muted }}>{project.problem}</p>
+   409→   409→                        </div>
+   410→   410→                        <div>
+   411→   411→                          <h4 className="font-orbitron text-[10px] font-semibold mb-1" style={{ color: project.color }}>
+   412→   412→                            ARCHITECTURE
+   413→   413→                          </h4>
+   414→   414→                          <p className="font-jetbrains text-xs" style={{ color: COLORS.muted }}>{project.architecture}</p>
+   415→   415→                        </div>
+   416→   416→                        <div>
+   417→   417→                          <h4 className="font-orbitron text-[10px] font-semibold mb-1" style={{ color: project.color }}>
+   418→   418→                            HIGHLIGHTS
+   419→   419→                          </h4>
+   420→   420→                          <ul className="space-y-1">
+   421→   421→                            {project.highlights.map((h, i) => (
+   422→   422→                              <li key={i} className="flex items-center gap-2">
+   423→   423→                                <span className="text-xs" style={{ color: COLORS.green }}>✓</span>
+   424→   424→                                <span className="font-jetbrains text-xs" style={{ color: COLORS.muted }}>{h}</span>
+   425→   425→                              </li>
+   426→   426→                            ))}
+   427→   427→                          </ul>
+   428→   428→                        </div>
+   429→   429→                        <div className="flex flex-wrap gap-1.5">
+   430→   430→                          {project.techStack.map((t, i) => (
+   431→   431→                            <span
+   432→   432→                              key={i}
+   433→   433→                              className="font-jetbrains text-[9px] px-1.5 py-0.5 rounded"
+   434→   434→                              style={{ background: `${project.color}15`, color: project.color }}
+   435→   435→                            >
+   436→   436→                              {t}
+   437→   437→                            </span>
+   438→   438→                          ))}
+   439→   439→                        </div>
+   440→   440→                        <div
+   441→   441→                          className="font-jetbrains text-[10px] px-2 py-1.5 rounded"
+   442→   442→                          style={{ background: `${COLORS.yellow}10`, border: `1px solid ${COLORS.yellow}20`, color: COLORS.yellow }}
+   443→   443→                        >
+   444→   444→                          💡 Lessons: {project.lessons}
+   445→   445→                        </div>
+   446→   446→                      </div>
+   447→   447→                    </motion.div>
+   448→   448→                  )}
+   449→   449→                </AnimatePresence>
+   450→   450→              </GlassCard>
+   451→   451→            </motion.div>
+   452→   452→          )
+   453→   453→        })}
+   454→   454→      </div>
+   455→   455→    </div>
+   456→   456→  )
+   457→   457→}
+   458→   458→
+   459→   459→// ─── Skills Section (Tech Tree) ──────────────────────────────────────────────────
+   460→   460→
+   461→   461→function SkillsSection() {
+   462→   462→  const [activeCategory, setActiveCategory] = useState<string>('ai_ml')
+   463→   463→
+   464→   464→  const categories = [
+   465→   465→    { key: 'ai_ml', label: 'AI / ML', color: '#00E5FF', icon: '🧠' },
+   466→   466→    { key: 'languages', label: 'Languages', color: '#3776AB', icon: '🐍' },
+   467→   467→    { key: 'frontend', label: 'Frontend', color: '#61DAFB', icon: '⚛️' },
+   468→   468→    { key: 'backend', label: 'Backend', color: '#339933', icon: '🔧' },
+   469→   469→    { key: 'databases', label: 'Databases', color: '#47A248', icon: '🗄️' },
+   470→   470→    { key: 'devops', label: 'DevOps', color: '#2496ED', icon: '🐳' },
+   471→   471→  ]
+   472→   472→
+   473→   473→  const currentSkills = skillsData[activeCategory as keyof typeof skillsData] || []
+   474→   474→
+   475→   475→  return (
+   476→   476→    <div className="p-5 h-full overflow-y-auto custom-scrollbar">
+   477→   477→      <SectionHeader title="Skills" icon="⚡" color={COLORS.green} subtitle="Interactive tech tree" />
+   478→   478→
+   479→   479→      {/* Category tabs */}
+   480→   480→      <div className="flex flex-wrap gap-2 mb-5">
+   481→   481→        {categories.map((cat) => (
+   482→   482→          <button
+   483→   483→            key={cat.key}
+   484→   484→            className="font-jetbrains text-[10px] px-3 py-1.5 rounded-lg transition-all duration-200"
+   485→   485→            style={{
+   486→   486→              background: activeCategory === cat.key ? `${cat.color}20` : 'rgba(148,163,184,0.05)',
+   487→   487→              color: activeCategory === cat.key ? cat.color : COLORS.muted,
+   488→   488→              border: `1px solid ${activeCategory === cat.key ? cat.color + '40' : 'rgba(148,163,184,0.1)'}`,
+   489→   489→              boxShadow: activeCategory === cat.key ? `0 0 10px ${cat.color}20` : 'none',
+   490→   490→            }}
+   491→   491→            onClick={() => setActiveCategory(cat.key)}
+   492→   492→          >
+   493→   493→            <span className="mr-1">{cat.icon}</span>
+   494→   494→            {cat.label}
+   495→   495→          </button>
+   496→   496→        ))}
+   497→   497→      </div>
+   498→   498→
+   499→   499→      {/* Skills tree */}
+   500→   500→      <div className="relative">
+   501→   501→        {/* Connection line from center */}
+   502→   502→        <div
+   503→   503→          className="absolute left-6 top-0 bottom-0 w-px"
+   504→   504→          style={{
+   505→   505→            background: `linear-gradient(180deg, ${categories.find(c => c.key === activeCategory)?.color || COLORS.green}40, transparent)`,
+   506→   506→          }}
+   507→   507→        />
+   508→   508→
+   509→   509→        <div className="space-y-3">
+   510→   510→          {(currentSkills as Array<{ name: string; level: number; color: string }>).map((skill, idx) => (
+   511→   511→            <motion.div
+   512→   512→              key={skill.name}
+   513→   513→              className="relative pl-12"
+   514→   514→              style={{ transition: 'transform 0.3s ease, filter 0.3s ease' }}
+   515→   515→              initial={{ opacity: 0, x: -15 }}
+   516→   516→              animate={{ opacity: 1, x: 0 }}
+   517→   517→              transition={{ duration: 0.3, delay: idx * 0.06 }}
+   518→   518→            >
+   519→   519→              {/* Node connector */}
+   520→   520→              <div
+   521→   521→                className="absolute left-4 top-3.5 w-3 h-3 rounded-full border-2"
+   522→   522→                style={{
+   523→   523→                  borderColor: skill.color,
+   524→   524→                  background: `${skill.color}30`,
+   525→   525→                  boxShadow: `0 0 6px ${skill.color}40`,
+   526→   526→                }}
+   527→   527→              />
+   528→   528→
+   529→   529→              <div
+   530→   530→                className="rounded-lg p-3"
+   531→   531→                style={{
+   532→   532→                  background: 'rgba(10, 15, 40, 0.5)',
+   533→   533→                  border: `1px solid ${skill.color}20`,
+   534→   534→                }}
+   535→   535→              >
+   536→   536→                <div className="flex items-center justify-between mb-2">
+   537→   537→                  <span className="font-jetbrains text-xs font-medium" style={{ color: skill.color }}>
+   538→   538→                    {skill.name}
+   539→   539→                  </span>
+   540→   540→                  <span className="font-jetbrains text-[10px]" style={{ color: COLORS.muted }}>
+   541→   541→                    {skill.level}%
+   542→   542→                  </span>
+   543→   543→                </div>
+   544→   544→                {/* Progress bar */}
+   545→   545→                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: `${skill.color}15` }}>
+   546→   546→                  <motion.div
+   547→   547→                    className="h-full rounded-full"
+   548→   548→                    style={{
+   549→   549→                      background: `linear-gradient(90deg, ${skill.color}, ${skill.color}CC)`,
+   550→   550→                      boxShadow: `0 0 8px ${skill.color}40`,
+   551→   551→                    }}
+   552→   552→                    initial={{ width: 0 }}
+   553→   553→                    animate={{ width: `${skill.level}%` }}
+   554→   554→                    transition={{ duration: 0.8, delay: idx * 0.06 + 0.2, ease: 'easeOut' }}
+   555→   555→                  />
+   556→   556→                </div>
+   557→   557→              </div>
+   558→   558→            </motion.div>
+   559→   559→          ))}
+   560→   560→        </div>
+   561→   561→      </div>
+   562→   562→    </div>
+   563→   563→  )
+   564→   564→}
+   565→   565→
+   566→   566→// ─── Certifications Section ──────────────────────────────────────────────────────
+   567→   567→
+   568→   568→function CertificationsSection() {
+   569→   569→  return (
+   570→   570→    <div className="p-5 h-full overflow-y-auto custom-scrollbar">
+   571→   571→      <SectionHeader title="Certifications" icon="🎓" color="#00B4D8" subtitle="Professional certifications & credentials" />
+   572→   572→
+   573→   573→      <div className="grid grid-cols-2 gap-3">
+   574→   574→        {certificationsData.map((cert, idx) => (
+   575→   575→          <motion.div
+   576→   576→            key={cert.credentialId}
+   577→   577→            initial={{ opacity: 0, scale: 0.9 }}
+   578→   578→            animate={{ opacity: 1, scale: 1 }}
+   579→   579→            transition={{ duration: 0.3, delay: idx * 0.1 }}
+   580→   580→          >
+   581→   581→            <GlassCard color={cert.color} delay={idx * 0.05}>
+   582→   582→              <div className="text-center">
+   583→   583→                <span className="text-3xl block mb-2">{cert.icon}</span>
+   584→   584→                <h3 className="font-orbitron text-[11px] font-bold mb-1" style={{ color: cert.color }}>
+   585→   585→                  {cert.title}
+   586→   586→                </h3>
+   587→   587→                <p className="font-jetbrains text-[10px]" style={{ color: COLORS.muted }}>
+   588→   588→                  {cert.issuer}
+   589→   589→                </p>
+   590→   590→                <div
+   591→   591→                  className="font-jetbrains text-[9px] mt-2 px-2 py-0.5 rounded-full inline-block"
+   592→   592→                  style={{ background: `${cert.color}15`, color: cert.color, border: `1px solid ${cert.color}25` }}
+   593→   593→                >
+   594→   594→                  {cert.date} • {cert.credentialId}
+   595→   595→                </div>
+   596→   596→              </div>
+   597→   597→            </GlassCard>
+   598→   598→          </motion.div>
+   599→   599→        ))}
+   600→   600→      </div>
+   601→   601→    </div>
+   602→   602→  )
+   603→   603→}
+   604→   604→
+   605→   605→// ─── Research Section ────────────────────────────────────────────────────────────
+   606→   606→
+   607→   607→function ResearchSection() {
+   608→   608→  return (
+   609→   609→    <div className="p-5 h-full overflow-y-auto custom-scrollbar">
+   610→   610→      <SectionHeader title="Research" icon="🔬" color={COLORS.yellow} subtitle="SCOPUS indexed publications" />
+   611→   611→
+   612→   612→      <div className="space-y-4">
+   613→   613→        {researchData.map((paper, idx) => (
+   614→   614→          <motion.div
+   615→   615→            key={paper.doi}
+   616→   616→            initial={{ opacity: 0, y: 15 }}
+   617→   617→            animate={{ opacity: 1, y: 0 }}
+   618→   618→            transition={{ duration: 0.3, delay: idx * 0.15 }}
+   619→   619→          >
+   620→   620→            <GlassCard color={paper.color} delay={idx * 0.05}>
+   621→   621→              <div className="flex items-start justify-between mb-2">
+   622→   622→                <div className="flex-1">
+   623→   623→                  <h3 className="font-orbitron text-xs font-bold leading-tight" style={{ color: paper.color }}>
+   624→   624→                    {paper.title}
+   625→   625→                  </h3>
+   626→   626→                </div>
+   627→   627→                <span
+   628→   628→                  className="font-jetbrains text-[9px] px-2 py-0.5 rounded-full shrink-0 ml-2"
+   629→   629→                  style={{ background: `${paper.color}20`, color: paper.color, border: `1px solid ${paper.color}30` }}
+   630→   630→                >
+   631→   631→                  {paper.type}
+   632→   632→                </span>
+   633→   633→              </div>
+   634→   634→              <p className="font-jetbrains text-xs leading-relaxed mb-3" style={{ color: COLORS.muted }}>
+   635→   635→                {paper.abstract}
+   636→   636→              </p>
+   637→   637→              <div className="flex items-center gap-4 font-jetbrains text-[10px]" style={{ color: COLORS.muted }}>
+   638→   638→                <span>📅 {paper.year}</span>
+   639→   639→                <span>📖 {paper.citations} citations</span>
+   640→   640→                <span style={{ color: paper.color }}>DOI: {paper.doi}</span>
+   641→   641→              </div>
+   642→   642→            </GlassCard>
+   643→   643→          </motion.div>
+   644→   644→        ))}
+   645→   645→      </div>
+   646→   646→    </div>
+   647→   647→  )
+   648→   648→}
+   649→   649→
+   650→   650→// ─── Resume Section ──────────────────────────────────────────────────────────────
+   651→   651→
+   652→   652→function ResumeSection() {
+   653→   653→  return (
+   654→   654→    <div className="p-5 h-full flex flex-col items-center justify-center">
+   655→   655→      <SectionHeader title="Resume" icon="📄" color={COLORS.muted} subtitle="Download my full resume" />
+   656→   656→      <motion.div
+   657→   657→        className="flex flex-col items-center gap-6 mt-4"
+   658→   658→        initial={{ opacity: 0, scale: 0.9 }}
+   659→   659→        animate={{ opacity: 1, scale: 1 }}
+   660→   660→        transition={{ duration: 0.4 }}
+   661→   661→      >
+   662→   662→        <div
+   663→   663→          className="w-32 h-40 rounded-lg flex items-center justify-center"
+   664→   664→          style={{
+   665→   665→            background: 'rgba(10, 15, 40, 0.6)',
+   666→   666→            border: '1px dashed rgba(148,163,184,0.3)',
+   667→   667→          }}
+   668→   668→        >
+   669→   669→          <span className="text-5xl opacity-30">📄</span>
+   670→   670→        </div>
+   671→   671→        <button
+   672→   672→          className="font-orbitron text-xs px-6 py-3 rounded-lg transition-all duration-200 hover:scale-105"
+   673→   673→          style={{
+   674→   674→            background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.secondary})`,
+   675→   675→            color: COLORS.bg,
+   676→   676→            boxShadow: `0 0 20px ${COLORS.primary}30`,
+   677→   677→          }}
+   678→   678→        >
+   679→   679→          ⬇ Download Resume
+   680→   680→        </button>
+   681→   681→        <p className="font-jetbrains text-[10px]" style={{ color: COLORS.muted }}>
+   682→   682→          PDF format • Updated 2024
+   683→   683→        </p>
+   684→   684→      </motion.div>
+   685→   685→    </div>
+   686→   686→  )
+   687→   687→}
+   688→   688→
+   689→   689→// ─── Contact Section ─────────────────────────────────────────────────────────────
+   690→   690→
+   691→   691→function ContactSection() {
+   692→   692→  const contacts = [
+   693→   693→    { icon: '📧', label: 'Email', value: aboutData.email, color: COLORS.primary },
+   694→   694→    { icon: '💼', label: 'LinkedIn', value: aboutData.linkedin, color: '#0077B5' },
+   695→   695→    { icon: '🐙', label: 'GitHub', value: aboutData.github, color: '#FFFFFF' },
+   696→   696→    { icon: '🌐', label: 'Portfolio', value: aboutData.portfolio, color: COLORS.secondary },
+   697→   697→    { icon: '📱', label: 'Phone', value: aboutData.phone, color: COLORS.green },
+   698→   698→    { icon: '📍', label: 'Location', value: aboutData.location, color: COLORS.orange },
+   699→   699→  ]
+   700→   700→
+   701→   701→  return (
+   702→   702→    <div className="p-5 h-full overflow-y-auto custom-scrollbar">
+   703→   703→      <SectionHeader title="Contact" icon="📡" color={COLORS.orange} subtitle="Get in touch" />
+   704→   704→
+   705→   705→      <div className="grid grid-cols-2 gap-3">
+   706→   706→        {contacts.map((c, idx) => (
+   707→   707→          <motion.div
+   708→   708→            key={c.label}
+   709→   709→            initial={{ opacity: 0, y: 10 }}
+   710→   710→            animate={{ opacity: 1, y: 0 }}
+   711→   711→            transition={{ duration: 0.3, delay: idx * 0.08 }}
+   712→   712→          >
+   713→   713→            <GlassCard color={c.color} delay={idx * 0.03} className="hover:scale-[1.02] transition-transform cursor-pointer">
+   714→   714→              <div className="flex items-center gap-2 mb-1">
+   715→   715→                <span className="text-lg">{c.icon}</span>
+   716→   716→                <span className="font-orbitron text-[10px] font-semibold" style={{ color: c.color }}>
+   717→   717→                  {c.label}
+   718→   718→                </span>
+   719→   719→              </div>
+   720→   720→              <p className="font-jetbrains text-xs break-all" style={{ color: COLORS.muted }}>
+   721→   721→                {c.value}
+   722→   722→              </p>
+   723→   723→            </GlassCard>
+   724→   724→          </motion.div>
+   725→   725→        ))}
+   726→   726→      </div>
+   727→   727→    </div>
+   728→   728→  )
+   729→   729→}
+   730→   730→
+   731→   731→// ─── Achievements Section ────────────────────────────────────────────────────────
+   732→   732→
+   733→   733→function AchievementsSection() {
+   734→   734→  return (
+   735→   735→    <div className="p-5 h-full overflow-y-auto custom-scrollbar">
+   736→   736→      <SectionHeader title="Achievements" icon="🏆" color={COLORS.yellow} subtitle="Milestones & accolades" />
+   737→   737→
+   738→   738→      <div className="grid grid-cols-2 gap-3">
+   739→   739→        {achievementsData.map((a, idx) => (
+   740→   740→          <motion.div
+   741→   741→            key={a.title}
+   742→   742→            initial={{ opacity: 0, scale: 0.85 }}
+   743→   743→            animate={{ opacity: 1, scale: 1 }}
+   744→   744→            transition={{ duration: 0.35, delay: idx * 0.08 }}
+   745→   745→          >
+   746→   746→            <GlassCard color={a.color} delay={idx * 0.04}>
+   747→   747→              <div className="text-center">
+   748→   748→                <span className="text-3xl block mb-2">{a.icon}</span>
+   749→   749→                <h3 className="font-orbitron text-[11px] font-bold mb-1" style={{ color: a.color }}>
+   750→   750→                  {a.title}
+   751→   751→                </h3>
+   752→   752→                <p className="font-jetbrains text-[10px]" style={{ color: COLORS.muted }}>
+   753→   753→                  {a.description}
+   754→   754→                </p>
+   755→   755→              </div>
+   756→   756→            </GlassCard>
+   757→   757→          </motion.div>
+   758→   758→        ))}
+   759→   759→      </div>
+   760→   760→    </div>
+   761→   761→  )
+   762→   762→}
+   763→   763→
+   764→   764→// ─── Secret Section ──────────────────────────────────────────────────────────────
+   765→   765→
+   766→   766→function SecretSection() {
+   767→   767→  const secretUnlocked = useOSStore(s => s.secretUnlocked)
+   768→   768→  const unlockSecret = useOSStore(s => s.unlockSecret)
+   769→   769→
+   770→   770→  return (
+   771→   771→    <div className="p-5 h-full flex flex-col items-center justify-center">
+   772→   772→      {!secretUnlocked ? (
+   773→   773→        <motion.div
+   774→   774→          className="text-center"
+   775→   775→          initial={{ opacity: 0 }}
+   776→   776→          animate={{ opacity: 1 }}
+   777→   777→          transition={{ duration: 0.5 }}
+   778→   778→        >
+   779→   779→          <span className="text-6xl block mb-4">🔒</span>
+   780→   780→          <h3 className="font-orbitron text-lg font-bold mb-2" style={{ color: COLORS.accent }}>
+   781→   781→            Access Denied
+   782→   782→          </h3>
+   783→   783→          <p className="font-jetbrains text-xs mb-4" style={{ color: COLORS.muted }}>
+   784→   784→            You need the Konami code to enter
+   785→   785→          </p>
+   786→   786→          <p className="font-jetbrains text-[10px]" style={{ color: COLORS.accent }}>
+   787→   787→            Hint: ↑↑↓↓←→←→BA
+   788→   788→          </p>
+   789→   789→        </motion.div>
+   790→   790→      ) : (
+   791→   791→        <motion.div
+   792→   792→          className="text-center"
+   793→   793→          initial={{ opacity: 0, scale: 0.8 }}
+   794→   794→          animate={{ opacity: 1, scale: 1 }}
+   795→   795→          transition={{ duration: 0.5, type: 'spring' }}
+   796→   796→        >
+   797→   797→          <span className="text-6xl block mb-4">🔓</span>
+   798→   798→          <h3 className="font-orbitron text-lg font-bold mb-2" style={{ color: COLORS.green }}>
+   799→   799→            Secret Room Unlocked!
+   800→   800→          </h3>
+   801→   801→          <GlassCard color={COLORS.green}>
+   802→   802→            <p className="font-jetbrains text-xs" style={{ color: COLORS.muted }}>
+   803→   803→              🎉 You found the secret! You are a true hacker. The AI future belongs to the curious.
+   804→   804→            </p>
+   805→   805→          </GlassCard>
+   806→   806→        </motion.div>
+   807→   807→      )}
+   808→   808→    </div>
+   809→   809→  )
+   810→   810→}
+   811→   811→
+   812→   812→// ─── Snake Section ───────────────────────────────────────────────────────────────
+   813→   813→
+   814→   814→function SnakeSection() {
+   815→   815→  return (
+   816→   816→    <div className="p-5 h-full flex flex-col items-center justify-center">
+   817→   817→      <SectionHeader title="Snake Game" icon="🐍" color={COLORS.green} subtitle="Classic arcade fun" />
+   818→   818→      <div
+   819→   819→        className="mt-4 w-80 h-64 rounded-lg flex items-center justify-center"
+   820→   820→        style={{
+   821→   821→          background: 'rgba(10, 15, 40, 0.6)',
+   822→   822→          border: `1px dashed ${COLORS.green}30`,
+   823→   823→        }}
+   824→   824→      >
+   825→   825→        <div className="text-center">
+   826→   826→          <span className="text-5xl block mb-3">🐍</span>
+   827→   827→          <p className="font-orbitron text-sm font-bold" style={{ color: COLORS.green }}>
+   828→   828→            Coming Soon
+   829→   829→          </p>
+   830→   830→          <p className="font-jetbrains text-xs mt-1" style={{ color: COLORS.muted }}>
+   831→   831→            The snake is still evolving...
+   832→   832→          </p>
+   833→   833→        </div>
+   834→   834→      </div>
+   835→   835→    </div>
+   836→   836→  )
+   837→   837→}
+   838→   838→
+   839→   839→// ─── Settings Section ────────────────────────────────────────────────────────────
+   840→   840→
+   841→   841→function SettingsSection() {
+   842→   842→  const { soundEnabled, toggleSound, showParticles, toggleParticles } = useOSStore()
+   843→   843→
+   844→   844→  const settings = [
+   845→   845→    { icon: '🔊', label: 'Sound Effects', value: soundEnabled, onToggle: toggleSound, color: COLORS.primary },
+   846→   846→    { icon: '✨', label: 'Particles', value: showParticles, onToggle: toggleParticles, color: COLORS.secondary },
+   847→   847→  ]
+   848→   848→
+   849→   849→  return (
+   850→   850→    <div className="p-5 h-full overflow-y-auto custom-scrollbar">
+   851→   851→      <SectionHeader title="Settings" icon="⚙️" color={COLORS.muted} subtitle="System preferences" />
+   852→   852→
+   853→   853→      <div className="space-y-3">
+   854→   854→        {settings.map((s, idx) => (
+   855→   855→          <GlassCard key={s.label} color={s.color} delay={idx * 0.05}>
+   856→   856→            <div className="flex items-center justify-between">
+   857→   857→              <div className="flex items-center gap-3">
+   858→   858→                <span className="text-lg">{s.icon}</span>
+   859→   859→                <span className="font-jetbrains text-sm" style={{ color: COLORS.text }}>
+   860→   860→                  {s.label}
+   861→   861→                </span>
+   862→   862→              </div>
+   863→   863→              <button
+   864→   864→                className="w-10 h-5 rounded-full transition-all duration-200 relative"
+   865→   865→                style={{
+   866→   866→                  background: s.value ? `${s.color}40` : 'rgba(148,163,184,0.2)',
+   867→   867→                  border: `1px solid ${s.value ? s.color + '60' : 'rgba(148,163,184,0.2)'}`,
+   868→   868→                }}
+   869→   869→                onClick={s.onToggle}
+   870→   870→              >
+   871→   871→                <motion.div
+   872→   872→                  className="absolute top-0.5 w-3.5 h-3.5 rounded-full"
+   873→   873→                  style={{
+   874→   874→                    background: s.value ? s.color : COLORS.muted,
+   875→   875→                    boxShadow: s.value ? `0 0 6px ${s.color}60` : 'none',
+   876→   876→                  }}
+   877→   877→                  animate={{ left: s.value ? '22px' : '2px' }}
+   878→   878→                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+   879→   879→                />
+   880→   880→              </button>
+   881→   881→            </div>
+   882→   882→          </GlassCard>
+   883→   883→        ))}
+   884→   884→
+   885→   885→        <GlassCard color={COLORS.accent} delay={0.15}>
+   886→   886→          <div className="text-center">
+   887→   887→            <span className="text-2xl">🤖</span>
+   888→   888→            <h4 className="font-orbitron text-xs font-semibold mt-2" style={{ color: COLORS.accent }}>
+   889→   889→              SRIRAM.OS v3.0
+   890→   890→            </h4>
+   891→   891→            <p className="font-jetbrains text-[10px] mt-1" style={{ color: COLORS.muted }}>
+   892→   892→              AI Operating System Portfolio
+   893→   893→            </p>
+   894→   894→            <p className="font-jetbrains text-[9px] mt-1" style={{ color: COLORS.muted }}>
+   895→   895→              Built with Next.js, TypeScript & Framer Motion
+   896→   896→            </p>
+   897→   897→          </div>
+   898→   898→        </GlassCard>
+   899→   899→      </div>
+   900→   900→    </div>
+   901→   901→  )
+   902→   902→}
+   903→   903→
+   904→   904→// ─── Window Content Mapper ───────────────────────────────────────────────────────
+   905→   905→
+   906→   906→function WindowContent({ windowId }: { windowId: WindowId }) {
+   907→   907→  switch (windowId) {
+   908→   908→    case 'about': return <AboutSection />
+   909→   909→    case 'experience': return <ExperienceSection />
+   910→   910→    case 'projects': return <ProjectsSection />
+   911→   911→    case 'skills': return <SkillsSection />
+   912→   912→    case 'certifications': return <CertificationsSection />
+   913→   913→    case 'research': return <ResearchSection />
+   914→   914→    case 'resume': return <ResumeSection />
+   915→   915→    case 'contact': return <ContactSection />
+   916→   916→    case 'terminal': return <Terminal />
+   917→   917→    case 'achievements': return <AchievementsSection />
+   918→   918→    case 'secret': return <SecretSection />
+   919→   919→    case 'snake': return <SnakeSection />
+   920→   920→    case 'settings': return <SettingsSection />
+   921→   921→    default: return <div className="p-5 font-jetbrains text-sm" style={{ color: COLORS.muted }}>Content not found</div>
+   922→   922→  }
+   923→   923→}
+   924→   924→
+   925→   925→// ─── Start Menu ──────────────────────────────────────────────────────────────────
+   926→   926→
+   927→   927→function StartMenu({ isOpen, onClose, onOpenWindow }: {
+   928→   928→  isOpen: boolean
+   929→   929→  onClose: () => void
+   930→   930→  onOpenWindow: (id: WindowId) => void
+   931→   931→}) {
+   932→   932→  const menuItems: Array<{ id: WindowId; icon: string; label: string; color: string }> = [
+   933→   933→    { id: 'about', icon: '🤖', label: 'About Me', color: COLORS.primary },
+   934→   934→    { id: 'experience', icon: '💼', label: 'Experience', color: COLORS.accent },
+   935→   935→    { id: 'projects', icon: '🚀', label: 'Projects', color: COLORS.secondary },
+   936→   936→    { id: 'skills', icon: '⚡', label: 'Skills', color: COLORS.green },
+   937→   937→    { id: 'certifications', icon: '🎓', label: 'Certifications', color: '#00B4D8' },
+   938→   938→    { id: 'research', icon: '🔬', label: 'Research', color: COLORS.yellow },
+   939→   939→    { id: 'achievements', icon: '🏆', label: 'Achievements', color: COLORS.yellow },
+   940→   940→    { id: 'resume', icon: '📄', label: 'Resume', color: COLORS.muted },
+   941→   941→    { id: 'contact', icon: '📡', label: 'Contact', color: COLORS.orange },
+   942→   942→    { id: 'terminal', icon: '💻', label: 'Terminal', color: COLORS.primary },
+   943→   943→    { id: 'settings', icon: '⚙️', label: 'Settings', color: COLORS.muted },
+   944→   944→  ]
+   945→   945→
+   946→   946→  const handleClick = (id: WindowId) => {
+   947→   947→    onOpenWindow(id)
+   948→   948→    onClose()
+   949→   949→  }
+   950→   950→
+   951→   951→  return (
+   952→   952→    <AnimatePresence>
+   953→   953→      {isOpen && (
+   954→   954→        <>
+   955→   955→          {/* Backdrop */}
+   956→   956→          <motion.div
+   957→   957→            className="fixed inset-0 z-[55]"
+   958→   958→            onClick={onClose}
+   959→   959→            initial={{ opacity: 0 }}
+   960→   960→            animate={{ opacity: 1 }}
+   961→   961→            exit={{ opacity: 0 }}
+   962→   962→          />
+   963→   963→          <motion.div
+   964→   964→            className="absolute bottom-14 left-2 z-[60] w-64 rounded-xl overflow-hidden"
+   965→   965→            style={{
+   966→   966→              background: 'rgba(10, 15, 40, 0.92)',
+   967→   967→              backdropFilter: 'blur(20px)',
+   968→   968→              border: `1px solid ${COLORS.primary}20`,
+   969→   969→              boxShadow: `0 8px 32px rgba(0,0,0,0.5), 0 0 20px ${COLORS.primary}10`,
+   970→   970→            }}
+   971→   971→            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+   972→   972→            animate={{ opacity: 1, y: 0, scale: 1 }}
+   973→   973→            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+   974→   974→            transition={{ duration: 0.2 }}
+   975→   975→          >
+   976→   976→            {/* Header */}
+   977→   977→            <div
+   978→   978→              className="px-4 py-3 border-b"
+   979→   979→              style={{ borderBottom: `1px solid ${COLORS.primary}15` }}
+   980→   980→            >
+   981→   981→              <div className="flex items-center gap-2">
+   982→   982→                <span className="text-lg">🖥️</span>
+   983→   983→                <div>
+   984→   984→                  <h3 className="font-orbitron text-xs font-bold" style={{ color: COLORS.primary }}>
+   985→   985→                    SRIRAM.OS
+   986→   986→                  </h3>
+   987→   987→                  <p className="font-jetbrains text-[9px]" style={{ color: COLORS.muted }}>
+   988→   988→                    v3.0.1 • AI Operating System
+   989→   989→                  </p>
+   990→   990→                </div>
+   991→   991→              </div>
+   992→   992→            </div>
+   993→   993→
+   994→   994→            {/* Menu Items */}
+   995→   995→            <div className="p-2 max-h-80 overflow-y-auto custom-scrollbar">
+   996→   996→              {menuItems.map((item, idx) => (
+   997→   997→                <motion.button
+   998→   998→                  key={item.id}
+   999→   999→                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left"
+  1000→  1000→                  style={{
+  1001→  1001→                    color: COLORS.text,
+  1002→  1002→                    transition: 'background 150ms',
+  1003→  1003→                  }}
+  1004→  1004→                  onMouseEnter={(e) => {
+  1005→  1005→                    (e.currentTarget as HTMLElement).style.background = `${item.color}15`
+  1006→  1006→                  }}
+  1007→  1007→                  onMouseLeave={(e) => {
+  1008→  1008→                    (e.currentTarget as HTMLElement).style.background = 'transparent'
+  1009→  1009→                  }}
+  1010→  1010→                  onClick={() => handleClick(item.id)}
+  1011→  1011→                  initial={{ opacity: 0, x: -10 }}
+  1012→  1012→                  animate={{ opacity: 1, x: 0 }}
+  1013→  1013→                  transition={{ delay: idx * 0.03 }}
+  1014→  1014→                >
+  1015→  1015→                  <span className="text-base">{item.icon}</span>
+  1016→  1016→                  <span className="font-jetbrains text-xs" style={{ color: COLORS.text }}>
+  1017→  1017→                    {item.label}
+  1018→  1018→                  </span>
+  1019→  1019→                </motion.button>
+  1020→  1020→              ))}
+  1021→  1021→            </div>
+  1022→  1022→
+  1023→  1023→            {/* Footer */}
+  1024→  1024→            <div
+  1025→  1025→              className="px-4 py-2 border-t"
+  1026→  1026→              style={{ borderTop: `1px solid ${COLORS.primary}15` }}
+  1027→  1027→            >
+  1028→  1028→              <p className="font-jetbrains text-[9px]" style={{ color: COLORS.muted }}>
+  1029→  1029→                Built with Next.js & Framer Motion
+  1030→  1030→              </p>
+  1031→  1031→            </div>
+  1032→  1032→          </motion.div>
+  1033→  1033→        </>
+  1034→  1034→      )}
+  1035→  1035→    </AnimatePresence>
+  1036→  1036→  )
+  1037→  1037→}
+  1038→  1038→
+  1039→  1039→// ─── Taskbar ─────────────────────────────────────────────────────────────────────
+  1040→  1040→
+  1041→  1041→function Taskbar({
+  1042→  1042→  openWindows,
+  1043→  1043→  activeWindow,
+  1044→  1044→  onFocusWindow,
+  1045→  1045→  onStartClick,
+  1046→  1046→  startMenuOpen,
+  1047→  1047→  onCloseStartMenu,
+  1048→  1048→  onOpenWindow,
+  1049→  1049→}: {
+  1050→  1050→  openWindows: WindowId[]
+  1051→  1051→  activeWindow: WindowId | null
+  1052→  1052→  onFocusWindow: (id: WindowId) => void
+  1053→  1053→  onStartClick: () => void
+  1054→  1054→  startMenuOpen: boolean
+  1055→  1055→  onCloseStartMenu: () => void
+  1056→  1056→  onOpenWindow: (id: WindowId) => void
+  1057→  1057→}) {
+  1058→  1058→  const [time, setTime] = useState('')
+  1059→  1059→  const soundEnabled = useOSStore(s => s.soundEnabled)
+  1060→  1060→  const toggleSound = useOSStore(s => s.toggleSound)
+  1061→  1061→
+  1062→  1062→  // Update time every second
+  1063→  1063→  useEffect(() => {
+  1064→  1064→    const updateTime = () => {
+  1065→  1065→      const now = new Date()
+  1066→  1066→      setTime(now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }))
+  1067→  1067→    }
+  1068→  1068→    updateTime()
+  1069→  1069→    const interval = setInterval(updateTime, 1000)
+  1070→  1070→    return () => clearInterval(interval)
+  1071→  1071→  }, [])
+  1072→  1072→
+  1073→  1073→  return (
+  1074→  1074→    <>
+  1075→  1075→      <StartMenu isOpen={startMenuOpen} onClose={onCloseStartMenu} onOpenWindow={onOpenWindow} />
+  1076→  1076→
+  1077→  1077→      <div
+  1078→  1078→        className="absolute bottom-0 left-0 right-0 h-12 flex items-center px-2 gap-1 z-[70]"
+  1079→  1079→        style={{
+  1080→  1080→          background: 'rgba(5, 8, 22, 0.9)',
+  1081→  1081→          backdropFilter: 'blur(20px)',
+  1082→  1082→          borderTop: `1px solid ${COLORS.primary}15`,
+  1083→  1083→          boxShadow: '0 -2px 20px rgba(0,0,0,0.3)',
+  1084→  1084→        }}
+  1085→  1085→      >
+  1086→  1086→        {/* Start Button */}
+  1087→  1087→        <motion.button
+  1088→  1088→          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg h-8"
+  1089→  1089→          style={{
+  1090→  1090→            background: startMenuOpen ? `${COLORS.primary}20` : 'transparent',
+  1091→  1091→            border: `1px solid ${startMenuOpen ? COLORS.primary + '40' : 'transparent'}`,
+  1092→  1092→            transition: 'background 150ms, border-color 150ms',
+  1093→  1093→          }}
+  1094→  1094→          onClick={onStartClick}
+  1095→  1095→          whileHover={{ scale: 1.02 }}
+  1096→  1096→          whileTap={{ scale: 0.97 }}
+  1097→  1097→        >
+  1098→  1098→          <span className="text-sm">🖥️</span>
+  1099→  1099→          <span
+  1100→  1100→            className="font-orbitron text-[10px] font-bold hidden sm:inline"
+  1101→  1101→            style={{ color: startMenuOpen ? COLORS.primary : COLORS.muted }}
+  1102→  1102→          >
+  1103→  1103→            SRIRAM.OS
+  1104→  1104→          </span>
+  1105→  1105→        </motion.button>
+  1106→  1106→
+  1107→  1107→        {/* Separator */}
+  1108→  1108→        <div className="w-px h-6 mx-1" style={{ background: `${COLORS.primary}20` }} />
+  1109→  1109→
+  1110→  1110→        {/* Open Windows */}
+  1111→  1111→        <div className="flex-1 flex items-center gap-1 overflow-x-auto no-scrollbar">
+  1112→  1112→          {openWindows.map((winId) => {
+  1113→  1113→            const config = getWindowConfig(winId)
+  1114→  1114→            const isActive = activeWindow === winId
+  1115→  1115→            return (
+  1116→  1116→              <motion.button
+  1117→  1117→                key={winId}
+  1118→  1118→                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg h-8 shrink-0"
+  1119→  1119→                style={{
+  1120→  1120→                  background: isActive ? `${config.color}15` : 'rgba(148,163,184,0.05)',
+  1121→  1121→                  border: `1px solid ${isActive ? config.color + '30' : 'rgba(148,163,184,0.08)'}`,
+  1122→  1122→                  boxShadow: isActive ? `0 0 8px ${config.color}15` : 'none',
+  1123→  1123→                  transition: 'background 150ms, border-color 150ms, box-shadow 150ms',
+  1124→  1124→                }}
+  1125→  1125→                onClick={() => onFocusWindow(winId)}
+  1126→  1126→                whileHover={{ scale: 1.02 }}
+  1127→  1127→                whileTap={{ scale: 0.97 }}
+  1128→  1128→                layout
+  1129→  1129→              >
+  1130→  1130→                <span className="text-xs">{config.icon}</span>
+  1131→  1131→                <span
+  1132→  1132→                  className="font-jetbrains text-[10px] hidden sm:inline max-w-[80px] truncate"
+  1133→  1133→                  style={{ color: isActive ? config.color : COLORS.muted }}
+  1134→  1134→                >
+  1135→  1135→                  {config.title}
+  1136→  1136→                </span>
+  1137→  1137→                {isActive && (
+  1138→  1138→                  <motion.div
+  1139→  1139→                    className="w-1 h-1 rounded-full ml-0.5"
+  1140→  1140→                    style={{ background: config.color, boxShadow: `0 0 4px ${config.color}` }}
+  1141→  1141→                    layoutId="activeWindowIndicator"
+  1142→  1142→                  />
+  1143→  1143→                )}
+  1144→  1144→              </motion.button>
+  1145→  1145→            )
+  1146→  1146→          })}
+  1147→  1147→        </div>
+  1148→  1148→
+  1149→  1149→        {/* System Tray */}
+  1150→  1150→        <div className="flex items-center gap-2">
+  1151→  1151→          {/* Sound Toggle */}
+  1152→  1152→          <button
+  1153→  1153→            className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-150"
+  1154→  1154→            style={{
+  1155→  1155→              background: soundEnabled ? 'transparent' : 'rgba(255,68,68,0.1)',
+  1156→  1156→            }}
+  1157→  1157→            onClick={toggleSound}
+  1158→  1158→          >
+  1159→  1159→            <span className="text-sm">{soundEnabled ? '🔊' : '🔇'}</span>
+  1160→  1160→          </button>
+  1161→  1161→
+  1162→  1162→          {/* Assistant Button */}
+  1163→  1163→          <button
+  1164→  1164→            className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-150"
+  1165→  1165→            style={{ background: 'transparent' }}
+  1166→  1166→          >
+  1167→  1167→            <span className="text-sm">🤖</span>
+  1168→  1168→          </button>
+  1169→  1169→
+  1170→  1170→          {/* Separator */}
+  1171→  1171→          <div className="w-px h-5" style={{ background: `${COLORS.primary}15` }} />
+  1172→  1172→
+  1173→  1173→          {/* Time */}
+  1174→  1174→          <div className="font-jetbrains text-[10px] px-2" style={{ color: COLORS.muted }}>
+  1175→  1175→            {time}
+  1176→  1176→          </div>
+  1177→  1177→        </div>
+  1178→  1178→      </div>
+  1179→  1179→    </>
+  1180→  1180→  )
+  1181→  1181→}
+  1182→  1182→
+  1183→  1183→// ─── Main Desktop Component ──────────────────────────────────────────────────────
+  1184→  1184→
+  1185→  1185→export default function Desktop() {
+  1186→  1186→  const {
+  1187→  1187→    openWindows,
+  1188→  1188→    activeWindow,
+  1189→  1189→    openWindow,
+  1190→  1190→    closeWindow,
+  1191→  1191→    focusWindow,
+  1192→  1192→    minimizeWindow,
+  1193→  1193→  } = useOSStore()
+  1194→  1194→
+  1195→  1195→  const [startMenuOpen, setStartMenuOpen] = useState(false)
+  1196→  1196→  const { play } = useSound()
+  1197→  1197→  const unlockSecret = useOSStore(s => s.unlockSecret)
+  1198→  1198→
+  1199→  1199→  // Konami code handler
+  1200→  1200→  useKonamiCode(unlockSecret)
+  1201→  1201→
+  1202→  1202→  // Map building clicks from PixelWorld to window opens
+  1203→  1203→  const handleBuildingClick = useCallback((buildingId: string) => {
+  1204→  1204→    const windowId = BUILDING_TO_WINDOW[buildingId]
+  1205→  1205→    if (windowId) {
+  1206→  1206→      play('open')
+  1207→  1207→      openWindow(windowId)
+  1208→  1208→    }
+  1209→  1209→  }, [openWindow, play])
+  1210→  1210→
+  1211→  1211→  const handleOpenWindow = useCallback((id: WindowId) => {
+  1212→  1212→    play('open')
+  1213→  1213→    openWindow(id)
+  1214→  1214→  }, [openWindow, play])
+  1215→  1215→
+  1216→  1216→  const handleCloseWindow = useCallback((id: WindowId) => {
+  1217→  1217→    play('close')
+  1218→  1218→    closeWindow(id)
+  1219→  1219→  }, [closeWindow, play])
+  1220→  1220→
+  1221→  1221→  const handleMinimizeWindow = useCallback((id: WindowId) => {
+  1222→  1222→    play('click')
+  1223→  1223→    minimizeWindow(id)
+  1224→  1224→  }, [minimizeWindow, play])
+  1225→  1225→
+  1226→  1226→  const handleFocusWindow = useCallback((id: WindowId) => {
+  1227→  1227→    play('click')
+  1228→  1228→    focusWindow(id)
+  1229→  1229→  }, [focusWindow, play])
+  1230→  1230→
+  1231→  1231→  return (
+  1232→  1232→    <div className="relative w-screen h-screen overflow-hidden" style={{ background: COLORS.bg }}>
+  1233→  1233→      {/* PixelWorld Background */}
+  1234→  1234→      <div className="absolute inset-0">
+  1235→  1235→        <PixelWorld onBuildingClick={handleBuildingClick} />
+  1236→  1236→      </div>
+  1237→  1237→
+  1238→  1238→      {/* Windows Layer */}
+  1239→  1239→      <div className="absolute inset-0 pointer-events-none">
+  1240→  1240→        {openWindows.map((winId, index) => {
+  1241→  1241→          const config = getWindowConfig(winId)
+  1242→  1242→          return (
+  1243→  1243→            <div key={winId} className="pointer-events-auto">
+  1244→  1244→              <Window
+  1245→  1245→                id={winId}
+  1246→  1246→                title={config.title}
+  1247→  1247→                icon={config.icon}
+  1248→  1248→                isActive={activeWindow === winId}
+  1249→  1249→                onClose={() => handleCloseWindow(winId)}
+  1250→  1250→                onFocus={() => handleFocusWindow(winId)}
+  1251→  1251→                onMinimize={() => handleMinimizeWindow(winId)}
+  1252→  1252→                width={config.width}
+  1253→  1253→                height={config.height}
+  1254→  1254→                color={config.color}
+  1255→  1255→                zIndex={10 + index}
+  1256→  1256→              >
+  1257→  1257→                <WindowContent windowId={winId} />
+  1258→  1258→              </Window>
+  1259→  1259→            </div>
+  1260→  1260→          )
+  1261→  1261→        })}
+  1262→  1262→      </div>
+  1263→  1263→
+  1264→  1264→      {/* Taskbar */}
+  1265→  1265→      <Taskbar
+  1266→  1266→        openWindows={openWindows}
+  1267→  1267→        activeWindow={activeWindow}
+  1268→  1268→        onFocusWindow={handleFocusWindow}
+  1269→  1269→        onStartClick={() => setStartMenuOpen(prev => !prev)}
+  1270→  1270→        startMenuOpen={startMenuOpen}
+  1271→  1271→        onCloseStartMenu={() => setStartMenuOpen(false)}
+  1272→  1272→        onOpenWindow={handleOpenWindow}
+  1273→  1273→      />
+  1274→  1274→
+  1275→  1275→      {/* AI Assistant */}
+  1276→  1276→      <AIAssistant />
+  1277→  1277→    </div>
+  1278→  1278→  )
+  1279→  1279→}
+  1280→  1280→

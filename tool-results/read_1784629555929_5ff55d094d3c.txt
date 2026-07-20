@@ -1,0 +1,2002 @@
+     1→'use client'
+     2→
+     3→import React, { useRef, useEffect, useCallback, useState } from 'react'
+     4→
+     5→/* ═══════════════════ Types ═══════════════════ */
+     6→
+     7→interface PixelWorldProps {
+     8→  onBuildingClick: (buildingId: string) => void
+     9→}
+    10→
+    11→interface BuildingData {
+    12→  id: string
+    13→  name: string
+    14→  color: string
+    15→  glowColor: string
+    16→  x: number
+    17→  y: number
+    18→  w: number
+    19→  h: number
+    20→  style: 'futuristic' | 'industrial' | 'academic' | 'tech' | 'nature' | 'comms'
+    21→}
+    22→
+    23→interface NPCData {
+    24→  id: string
+    25→  x: number
+    26→  y: number
+    27→  type: 'robot' | 'scientist'
+    28→  message: string
+    29→  color: string
+    30→  buildingId?: string  // Which building this guide is for
+    31→}
+    32→
+    33→interface Particle {
+    34→  x: number
+    35→  y: number
+    36→  vx: number
+    37→  vy: number
+    38→  life: number
+    39→  maxLife: number
+    40→  color: string
+    41→  size: number
+    42→}
+    43→
+    44→/* ═══════════════════ Constants ═══════════════════ */
+    45→
+    46→const WORLD_W = 2400
+    47→const WORLD_H = 1800
+    48→const PIXEL_SCALE = 1.3
+    49→const CHAR_SPEED = 4
+    50→const INTERACT_DIST = 85
+    51→const NPC_DIST = 120
+    52→const CAM_LERP = 0.08
+    53→
+    54→/* ═══════════════════ Game Data ═══════════════════ */
+    55→
+    56→const BUILDINGS: BuildingData[] = [
+    57→  { id: 'ai-lab', name: 'AI LAB', color: '#00695C', glowColor: '#00E5FF', x: 180, y: 100, w: 200, h: 150, style: 'futuristic' },
+    58→  { id: 'projects', name: 'PROJECTS', color: '#4A148C', glowColor: '#E040FB', x: 880, y: 100, w: 210, h: 150, style: 'tech' },
+    59→  { id: 'experience', name: 'EXPERIENCE', color: '#880E4F', glowColor: '#FF4081', x: 1560, y: 100, w: 200, h: 150, style: 'industrial' },
+    60→  { id: 'skills', name: 'SKILLS', color: '#1B5E20', glowColor: '#69F0AE', x: 180, y: 1050, w: 200, h: 150, style: 'academic' },
+    61→  { id: 'research', name: 'RESEARCH', color: '#E65100', glowColor: '#FFD740', x: 880, y: 1050, w: 210, h: 150, style: 'academic' },
+    62→  { id: 'contact', name: 'CONTACT', color: '#BF360C', glowColor: '#FFAB40', x: 1560, y: 1050, w: 200, h: 150, style: 'comms' },
+    63→]
+    64→
+    65→const NPCS: NPCData[] = [
+    66→  // ── Guides near each building entrance ──
+    67→  // AI LAB guide (building: x:180, y:100, w:200, h:150 → door center ~280, bottom ~250)
+    68→  { id: 'r1', x: 320, y: 285, type: 'robot', message: 'AI LAB — Enter to explore ML & AI!', color: '#00E5FF', buildingId: 'ai-lab' },
+    69→  // PROJECTS guide (building: x:880, y:100, w:210, h:150 → door center ~985, bottom ~250)
+    70→  { id: 's1', x: 1020, y: 285, type: 'scientist', message: 'PROJECTS — See what I built!', color: '#E040FB', buildingId: 'projects' },
+    71→  // EXPERIENCE guide (building: x:1560, y:100, w:200, h:150 → door center ~1660, bottom ~250)
+    72→  { id: 'r2', x: 1700, y: 285, type: 'robot', message: 'EXPERIENCE — My work history!', color: '#FF4081', buildingId: 'experience' },
+    73→  // SKILLS guide (building: x:180, y:1050, w:200, h:150 → door center ~280, bottom ~1200)
+    74→  { id: 's2', x: 320, y: 1235, type: 'scientist', message: 'SKILLS — Tech stack & tools!', color: '#69F0AE', buildingId: 'skills' },
+    75→  // RESEARCH guide (building: x:880, y:1050, w:210, h:150 → door center ~985, bottom ~1200)
+    76→  { id: 'r3', x: 1020, y: 1235, type: 'robot', message: 'RESEARCH — Papers & publications!', color: '#FFD740', buildingId: 'research' },
+    77→  // CONTACT guide (building: x:1560, y:1050, w:200, h:150 → door center ~1660, bottom ~1200)
+    78→  { id: 's3', x: 1700, y: 1235, type: 'scientist', message: 'CONTACT — Let\'s connect!', color: '#FFAB40', buildingId: 'contact' },
+    79→  // Central welcome guide at monument (monument at ~1160, 820)
+    80→  { id: 'r4', x: 1130, y: 870, type: 'robot', message: 'Welcome to SRIRAM.OS! Explore the labs!', color: '#00E5FF' },
+    81→]
+    82→
+    83→const PATHS = [
+    84→  { x: 180, y: 240, w: 1580, h: 20 },
+    85→  { x: 180, y: 1190, w: 1580, h: 20 },
+    86→  { x: 270, y: 240, w: 20, h: 950 },
+    87→  { x: 960, y: 240, w: 20, h: 950 },
+    88→  { x: 1640, y: 240, w: 20, h: 950 },
+    89→  { x: 270, y: 710, w: 1390, h: 20 },
+    90→]
+    91→
+    92→/* ═══════════════════ Interactive Objects ═══════════════════ */
+    93→
+    94→interface CrystalData {
+    95→  id: string
+    96→  x: number
+    97→  y: number
+    98→  color: string
+    99→  label: string
+   100→  collected: boolean
+   101→}
+   102→
+   103→interface BoostPadData {
+   104→  x: number
+   105→  y: number
+   106→  color: string
+   107→}
+   108→
+   109→interface TeleporterData {
+   110→  id: string
+   111→  x: number
+   112→  y: number
+   113→  targetId: string
+   114→  color: string
+   115→}
+   116→
+   117→const CRYSTALS: CrystalData[] = [
+   118→  { id: 'c1', x: 540, y: 300, color: '#00E5FF', label: 'AI Core', collected: false },
+   119→  { id: 'c2', x: 1200, y: 450, color: '#E040FB', label: 'Data Node', collected: false },
+   120→  { id: 'c3', x: 750, y: 800, color: '#69F0AE', label: 'Skill Gem', collected: false },
+   121→  { id: 'c4', x: 1400, y: 700, color: '#FF4081', label: 'Exp Crystal', collected: false },
+   122→  { id: 'c5', x: 400, y: 1300, color: '#FFD740', label: 'Research Orb', collected: false },
+   123→  { id: 'c6', x: 1050, y: 1400, color: '#FFAB40', label: 'Contact Link', collected: false },
+   124→  { id: 'c7', x: 1700, y: 400, color: '#00E5FF', label: 'Neural Chip', collected: false },
+   125→  { id: 'c8', x: 600, y: 600, color: '#E040FB', label: 'Logic Gate', collected: false },
+   126→  { id: 'c9', x: 1300, y: 1100, color: '#69F0AE', label: 'Quantum Bit', collected: false },
+   127→  { id: 'c10', x: 1100, y: 900, color: '#FFD740', label: 'Gold Token', collected: false },
+   128→]
+   129→
+   130→const BOOST_PADS: BoostPadData[] = [
+   131→  { x: 540, y: 710, color: '#00E5FF' },
+   132→  { x: 1200, y: 710, color: '#E040FB' },
+   133→  { x: 780, y: 1190, color: '#69F0AE' },
+   134→]
+   135→
+   136→const TELEPORTERS: TeleporterData[] = [
+   137→  { id: 'tp1', x: 180, y: 450, targetId: 'tp2', color: '#00E5FF' },
+   138→  { id: 'tp2', x: 1650, y: 1300, targetId: 'tp1', color: '#E040FB' },
+   139→]
+   140→
+   141→/* ═══════════════════ Seeded Random Generators ═══════════════════ */
+   142→
+   143→function makeRng(seed: number) {
+   144→  let s = seed
+   145→  return () => { s = (s * 16807) % 2147483647; return s / 2147483647 }
+   146→}
+   147→
+   148→function genGrass() {
+   149→  const r = makeRng(42)
+   150→  const out: { x: number; y: number; w: number; h: number; s: number }[] = []
+   151→  for (let i = 0; i < 800; i++) {
+   152→    out.push({ x: (r() * WORLD_W) | 0, y: (r() * WORLD_H) | 0, w: (r() * 12 + 4) | 0, h: (r() * 8 + 3) | 0, s: (r() * 5) | 0 })
+   153→  }
+   154→  return out
+   155→}
+   156→
+   157→function genStars() {
+   158→  const r = makeRng(77)
+   159→  const out: { x: number; y: number; b: number; spd: number; size: number }[] = []
+   160→  for (let i = 0; i < 200; i++) {
+   161→    out.push({ x: (r() * WORLD_W * 2) | 0, y: (r() * WORLD_H * 2) | 0, b: r(), spd: r() * 0.03 + 0.008, size: (r() * 2 + 1) | 0 })
+   162→  }
+   163→  return out
+   164→}
+   165→
+   166→function genNebulaClouds() {
+   167→  const r = makeRng(99)
+   168→  const out: { x: number; y: number; rx: number; ry: number; color: string; alpha: number }[] = []
+   169→  const cloudColors = ['#00E5FF', '#6C63FF', '#FF00C8', '#1a237e', '#4A148C', '#006064']
+   170→  for (let i = 0; i < 16; i++) {
+   171→    out.push({
+   172→      x: (r() * WORLD_W * 2) | 0,
+   173→      y: (r() * WORLD_H * 1.5) | 0,
+   174→      rx: (r() * 160 + 80) | 0,
+   175→      ry: (r() * 60 + 30) | 0,
+   176→      color: cloudColors[(r() * cloudColors.length) | 0],
+   177→      alpha: r() * 0.05 + 0.015,
+   178→    })
+   179→  }
+   180→  return out
+   181→}
+   182→
+   183→function genMountains() {
+   184→  const r = makeRng(555)
+   185→  const out: { x: number; h: number; w: number; color: string }[] = []
+   186→  const mColors = ['#0d1b3e', '#0f1f47', '#111d3a', '#0a1530']
+   187→  for (let i = 0; i < 25; i++) {
+   188→    out.push({
+   189→      x: (i * 200 + (r() * 80 - 40)) | 0,
+   190→      h: (r() * 100 + 50) | 0,
+   191→      w: (r() * 160 + 120) | 0,
+   192→      color: mColors[(r() * mColors.length) | 0],
+   193→    })
+   194→  }
+   195→  return out
+   196→}
+   197→
+   198→function genTrees() {
+   199→  const r = makeRng(303)
+   200→  const out: { x: number; y: number; size: number }[] = []
+   201→  for (let i = 0; i < 50; i++) {
+   202→    const tx = (r() * (WORLD_W - 50) + 25) | 0
+   203→    const ty = (r() * (WORLD_H - 50) + 25) | 0
+   204→    const onPath = PATHS.some(p => tx > p.x - 25 && tx < p.x + p.w + 25 && ty > p.y - 25 && ty < p.y + p.h + 25)
+   205→    const onBuilding = BUILDINGS.some(b => tx > b.x - 40 && tx < b.x + b.w + 40 && ty > b.y - 40 && ty < b.y + b.h + 40)
+   206→    if (!onPath && !onBuilding) {
+   207→      out.push({ x: tx, y: ty, size: (r() * 2 + 1) | 0 })
+   208→    }
+   209→  }
+   210→  return out
+   211→}
+   212→
+   213→function genFlowers() {
+   214→  const r = makeRng(555)
+   215→  const colors = ['#FF6B6B', '#FFE66D', '#4ECDC4', '#FF6B9D', '#C7F464', '#AB47BC']
+   216→  const out: { x: number; y: number; c: string }[] = []
+   217→  for (let i = 0; i < 100; i++) {
+   218→    out.push({ x: (r() * WORLD_W) | 0, y: (r() * WORLD_H) | 0, c: colors[(r() * colors.length) | 0] })
+   219→  }
+   220→  return out
+   221→}
+   222→
+   223→function genLamps() {
+   224→  return [
+   225→    { x: 270, y: 450 }, { x: 270, y: 680 }, { x: 270, y: 920 },
+   226→    { x: 960, y: 450 }, { x: 960, y: 680 }, { x: 960, y: 920 },
+   227→    { x: 1640, y: 450 }, { x: 1640, y: 680 }, { x: 1640, y: 920 },
+   228→    { x: 540, y: 240 }, { x: 780, y: 240 }, { x: 1200, y: 240 },
+   229→    { x: 540, y: 1190 }, { x: 780, y: 1190 }, { x: 1200, y: 1190 },
+   230→  ]
+   231→}
+   232→
+   233→const GRASS = genGrass()
+   234→const STARS = genStars()
+   235→const NEBULA_CLOUDS = genNebulaClouds()
+   236→const MOUNTAINS = genMountains()
+   237→const TREES = genTrees()
+   238→const FLOWERS = genFlowers()
+   239→const LAMPS = genLamps()
+   240→
+   241→const GRASS_SHADES = ['#0a2d50', '#0d365a', '#103f64', '#0b3058', '#0e3a5f']
+   242→
+   243→/* ═══════════════════ Color Helpers ═══════════════════ */
+   244→
+   245→function hexToRgb(hex: string) {
+   246→  const r = parseInt(hex.slice(1, 3), 16)
+   247→  const g = parseInt(hex.slice(3, 5), 16)
+   248→  const b = parseInt(hex.slice(5, 7), 16)
+   249→  return { r, g, b }
+   250→}
+   251→
+   252→function darken(hex: string, factor: number): string {
+   253→  const { r, g, b } = hexToRgb(hex)
+   254→  return `rgb(${Math.round(r * factor)},${Math.round(g * factor)},${Math.round(b * factor)})`
+   255→}
+   256→
+   257→function lighten(hex: string, factor: number): string {
+   258→  const { r, g, b } = hexToRgb(hex)
+   259→  return `rgb(${Math.min(255, Math.round(r + (255 - r) * factor))},${Math.min(255, Math.round(g + (255 - g) * factor))},${Math.min(255, Math.round(b + (255 - b) * factor))})`
+   260→}
+   261→
+   262→/* ═══════════════════ Rounded Rect Helper ═══════════════════ */
+   263→
+   264→function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+   265→  ctx.beginPath()
+   266→  ctx.moveTo(x + r, y)
+   267→  ctx.lineTo(x + w - r, y)
+   268→  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+   269→  ctx.lineTo(x + w, y + h - r)
+   270→  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+   271→  ctx.lineTo(x + r, y + h)
+   272→  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+   273→  ctx.lineTo(x, y + r)
+   274→  ctx.quadraticCurveTo(x, y, x + r, y)
+   275→  ctx.closePath()
+   276→}
+   277→
+   278→/* ═══════════════════ Draw Stroked Text ═══════════════════ */
+   279→
+   280→function drawStrokedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, strokeW: number = 2, strokeColor: string = '#000000', fillColor: string = '#FFFFFF') {
+   281→  ctx.textAlign = 'center'
+   282→  ctx.textBaseline = 'middle'
+   283→  ctx.lineWidth = strokeW
+   284→  ctx.strokeStyle = strokeColor
+   285→  ctx.lineJoin = 'round'
+   286→  ctx.miterLimit = 2
+   287→  ctx.strokeText(text, x, y)
+   288→  ctx.fillStyle = fillColor
+   289→  ctx.fillText(text, x, y)
+   290→}
+   291→
+   292→function drawGlowText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, glowColor: string, fillColor: string = '#FFFFFF', fontSize: number = 10) {
+   293→  ctx.textAlign = 'center'
+   294→  ctx.textBaseline = 'middle'
+   295→  ctx.font = `bold ${fontSize}px monospace`
+   296→  // Glow layer
+   297→  ctx.save()
+   298→  ctx.shadowColor = glowColor
+   299→  ctx.shadowBlur = 10
+   300→  ctx.fillStyle = glowColor
+   301→  ctx.fillText(text, x, y)
+   302→  ctx.restore()
+   303→  // Outline
+   304→  ctx.font = `bold ${fontSize}px monospace`
+   305→  ctx.textAlign = 'center'
+   306→  ctx.textBaseline = 'middle'
+   307→  ctx.lineWidth = 2.5
+   308→  ctx.strokeStyle = 'rgba(0,0,0,0.8)'
+   309→  ctx.lineJoin = 'round'
+   310→  ctx.strokeText(text, x, y)
+   311→  // Main fill
+   312→  ctx.fillStyle = fillColor
+   313→  ctx.fillText(text, x, y)
+   314→}
+   315→
+   316→/* ═══════════════════ Background Drawing ═══════════════════ */
+   317→
+   318→function drawBackground(ctx: CanvasRenderingContext2D, vw: number, vh: number, camX: number, camY: number, time: number) {
+   319→  // Deep space gradient
+   320→  const grad = ctx.createLinearGradient(0, 0, 0, vh)
+   321→  grad.addColorStop(0, '#030712')
+   322→  grad.addColorStop(0.3, '#070d1f')
+   323→  grad.addColorStop(0.6, '#0a1030')
+   324→  grad.addColorStop(1, '#0e1545')
+   325→  ctx.fillStyle = grad
+   326→  ctx.fillRect(0, 0, vw, vh)
+   327→
+   328→  // Nebula clouds (parallax 0.12x)
+   329→  for (const cloud of NEBULA_CLOUDS) {
+   330→    const cx = (cloud.x * 0.12 - camX * 0.12) | 0
+   331→    const cy = (cloud.y * 0.12 - camY * 0.12) | 0
+   332→    if (cx + cloud.rx < -20 || cx - cloud.rx > vw + 20 || cy + cloud.ry < -20 || cy - cloud.ry > vh + 20) continue
+   333→    const rgb = hexToRgb(cloud.color)
+   334→    const alpha = cloud.alpha + Math.sin(time * 0.001 + cloud.x * 0.01) * 0.006
+   335→    const cGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, cloud.rx)
+   336→    cGrad.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},${(alpha + 0.03).toFixed(3)})`)
+   337→    cGrad.addColorStop(0.4, `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha.toFixed(3)})`)
+   338→    cGrad.addColorStop(1, `rgba(${rgb.r},${rgb.g},${rgb.b},0)`)
+   339→    ctx.fillStyle = cGrad
+   340→    ctx.beginPath()
+   341→    ctx.ellipse(cx, cy, cloud.rx, cloud.ry, 0, 0, Math.PI * 2)
+   342→    ctx.fill()
+   343→  }
+   344→
+   345→  // Distant mountains (parallax 0.2x)
+   346→  for (const mt of MOUNTAINS) {
+   347→    const mx = (mt.x * 0.2 - camX * 0.2) | 0
+   348→    const my = (vh * 0.6 - camY * 0.2) | 0
+   349→    if (mx + mt.w < -10 || mx > vw + 10) continue
+   350→    ctx.fillStyle = mt.color
+   351→    ctx.beginPath()
+   352→    ctx.moveTo(mx, my)
+   353→    ctx.lineTo(mx + mt.w * 0.45, my - mt.h)
+   354→    ctx.lineTo(mx + mt.w * 0.55, my - mt.h * 0.9)
+   355→    ctx.lineTo(mx + mt.w, my)
+   356→    ctx.closePath()
+   357→    ctx.fill()
+   358→    // Mountain snow cap
+   359→    ctx.fillStyle = 'rgba(0,229,255,0.04)'
+   360→    ctx.beginPath()
+   361→    ctx.moveTo(mx + mt.w * 0.4, my - mt.h * 0.7)
+   362→    ctx.lineTo(mx + mt.w * 0.45, my - mt.h)
+   363→    ctx.lineTo(mx + mt.w * 0.55, my - mt.h * 0.9)
+   364→    ctx.lineTo(mx + mt.w * 0.6, my - mt.h * 0.6)
+   365→    ctx.closePath()
+   366→    ctx.fill()
+   367→  }
+   368→
+   369→  // Stars (parallax 0.35x)
+   370→  for (const st of STARS) {
+   371→    const sx = (st.x * 0.35 - camX * 0.35) | 0
+   372→    const sy = (st.y * 0.35 - camY * 0.35) | 0
+   373→    if (sx < -4 || sx > vw + 4 || sy < -4 || sy > vh + 4) continue
+   374→    const brightness = (Math.sin(time * st.spd * 60 + st.b * 100) + 1) / 2
+   375→    const alpha = 0.3 + brightness * 0.7
+   376→    ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`
+   377→    const s = st.size
+   378→    if (s > 1.5 && brightness > 0.5) {
+   379→      // Bright star with cross sparkle
+   380→      ctx.fillRect(sx, sy, 2, 2)
+   381→      ctx.fillStyle = `rgba(255,255,255,${(alpha * 0.25).toFixed(2)})`
+   382→      ctx.fillRect(sx - 2, sy + 0.5, 6, 1)
+   383→      ctx.fillRect(sx + 0.5, sy - 2, 1, 6)
+   384→    } else {
+   385→      ctx.fillRect(sx, sy, s > 1 ? 2 : 1, s > 1 ? 2 : 1)
+   386→    }
+   387→  }
+   388→
+   389→  // Atmospheric fog at bottom
+   390→  const fogGrad = ctx.createLinearGradient(0, vh * 0.8, 0, vh)
+   391→  fogGrad.addColorStop(0, 'rgba(10,15,40,0)')
+   392→  fogGrad.addColorStop(1, 'rgba(10,15,40,0.3)')
+   393→  ctx.fillStyle = fogGrad
+   394→  ctx.fillRect(0, vh * 0.8, vw, vh * 0.2)
+   395→}
+   396→
+   397→/* ═══════════════════ Ground Drawing ═══════════════════ */
+   398→
+   399→function drawGround(ctx: CanvasRenderingContext2D, vw: number, vh: number, camX: number, camY: number) {
+   400→  // Grass patches with texture
+   401→  for (const g of GRASS) {
+   402→    const gx = (g.x - camX) | 0
+   403→    const gy = (g.y - camY) | 0
+   404→    if (gx < -16 || gx > vw + 16 || gy < -16 || gy > vh + 16) continue
+   405→    ctx.fillStyle = GRASS_SHADES[g.s]
+   406→    ctx.fillRect(gx, gy, g.w, g.h)
+   407→    // Grass blade highlights
+   408→    if (g.s % 2 === 0 && g.w > 5) {
+   409→      ctx.fillStyle = 'rgba(0,229,255,0.025)'
+   410→      ctx.fillRect(gx + 1, gy, 1, g.h)
+   411→    }
+   412→  }
+   413→
+   414→  // Paths with realistic pavement texture
+   415→  for (const p of PATHS) {
+   416→    const px = (p.x - camX) | 0
+   417→    const py = (p.y - camY) | 0
+   418→    if (px > vw + p.w || px + p.w < 0 || py > vh + p.h || py + p.h < 0) continue
+   419→    // Base path with gradient
+   420→    const pathGrad = ctx.createLinearGradient(px, py, px, py + p.h)
+   421→    pathGrad.addColorStop(0, '#3d3d6b')
+   422→    pathGrad.addColorStop(0.5, '#2c2c54')
+   423→    pathGrad.addColorStop(1, '#3d3d6b')
+   424→    ctx.fillStyle = pathGrad
+   425→    ctx.fillRect(px, py, p.w, p.h)
+   426→    // Top curb edge
+   427→    ctx.fillStyle = '#4a4a7a'
+   428→    ctx.fillRect(px, py, p.w, 2)
+   429→    ctx.fillStyle = 'rgba(255,255,255,0.05)'
+   430→    ctx.fillRect(px, py, p.w, 1)
+   431→    // Bottom curb edge
+   432→    ctx.fillStyle = '#1a1a3e'
+   433→    ctx.fillRect(px, py + p.h - 2, p.w, 2)
+   434→    // Paving stone pattern
+   435→    ctx.fillStyle = 'rgba(61,61,107,0.3)'
+   436→    for (let cx = px + 5; cx < px + p.w - 5; cx += 10) {
+   437→      for (let cy = py + 3; cy < py + p.h - 3; cy += 6) {
+   438→        ctx.fillRect(cx + (cy % 2) * 5, cy, 8, 4)
+   439→      }
+   440→    }
+   441→    // Center guide line with glow
+   442→    ctx.fillStyle = 'rgba(0,229,255,0.04)'
+   443→    ctx.fillRect(px + 3, py + p.h / 2 - 1, p.w - 6, 2)
+   444→    // Edge glow lines
+   445→    ctx.fillStyle = 'rgba(0,229,255,0.06)'
+   446→    ctx.fillRect(px + 3, py + 2, p.w - 6, 1)
+   447→    ctx.fillRect(px + 3, py + p.h - 3, p.w - 6, 1)
+   448→  }
+   449→}
+   450→
+   451→function drawFlowers(ctx: CanvasRenderingContext2D, vw: number, vh: number, camX: number, camY: number) {
+   452→  for (const f of FLOWERS) {
+   453→    const fx = (f.x - camX) | 0
+   454→    const fy = (f.y - camY) | 0
+   455→    if (fx < -8 || fx > vw + 8 || fy < -8 || fy > vh + 8) continue
+   456→    ctx.fillStyle = '#2E7D32'
+   457→    ctx.fillRect(fx, fy + 3, 1, 4)
+   458→    ctx.fillStyle = f.c
+   459→    ctx.fillRect(fx - 1, fy, 3, 4)
+   460→    ctx.fillRect(fx, fy - 1, 1, 1)
+   461→    ctx.fillStyle = '#FFF9C4'
+   462→    ctx.fillRect(fx, fy + 1, 1, 1)
+   463→  }
+   464→}
+   465→
+   466→function drawTree(ctx: CanvasRenderingContext2D, tree: { x: number; y: number; size: number }, camX: number, camY: number, vw: number, vh: number) {
+   467→  const tx = (tree.x - camX) | 0
+   468→  const ty = (tree.y - camY) | 0
+   469→  if (tx < -30 || tx > vw + 30 || ty < -45 || ty > vh + 10) return
+   470→  const s = tree.size
+   471→  // Shadow on ground
+   472→  ctx.fillStyle = 'rgba(0,0,0,0.15)'
+   473→  ctx.beginPath()
+   474→  ctx.ellipse(tx + 4 * s, ty + 2, 8 * s, 3 * s, 0, 0, Math.PI * 2)
+   475→  ctx.fill()
+   476→  // Trunk with bark texture
+   477→  const trunkGrad = ctx.createLinearGradient(tx + 3 * s, ty - 4, tx + 5 * s, ty - 4)
+   478→  trunkGrad.addColorStop(0, '#4E342E')
+   479→  trunkGrad.addColorStop(0.5, '#5D4037')
+   480→  trunkGrad.addColorStop(1, '#3E2723')
+   481→  ctx.fillStyle = trunkGrad
+   482→  ctx.fillRect(tx + 3 * s, ty - 4, 2 * s, 12 * s)
+   483→  // Bark detail
+   484→  ctx.fillStyle = 'rgba(0,0,0,0.15)'
+   485→  ctx.fillRect(tx + 3 * s, ty + 2 * s, 2 * s, 1)
+   486→  ctx.fillRect(tx + 3 * s, ty + 5 * s, 2 * s, 1)
+   487→  // Canopy - overlapping circles for natural shape
+   488→  ctx.fillStyle = '#1B5E20'
+   489→  ctx.beginPath()
+   490→  ctx.arc(tx + 4 * s, ty - 8 * s, 7 * s, 0, Math.PI * 2)
+   491→  ctx.fill()
+   492→  ctx.fillStyle = '#2E7D32'
+   493→  ctx.beginPath()
+   494→  ctx.arc(tx + 2 * s, ty - 10 * s, 5 * s, 0, Math.PI * 2)
+   495→  ctx.fill()
+   496→  ctx.beginPath()
+   497→  ctx.arc(tx + 6 * s, ty - 10 * s, 5 * s, 0, Math.PI * 2)
+   498→  ctx.fill()
+   499→  ctx.fillStyle = '#388E3C'
+   500→  ctx.beginPath()
+   501→  ctx.arc(tx + 4 * s, ty - 12 * s, 4 * s, 0, Math.PI * 2)
+   502→  ctx.fill()
+   503→  // Canopy highlight
+   504→  ctx.fillStyle = 'rgba(105,240,174,0.1)'
+   505→  ctx.beginPath()
+   506→  ctx.arc(tx + 2 * s, ty - 10 * s, 3 * s, 0, Math.PI * 2)
+   507→  ctx.fill()
+   508→  // Canopy shadow (bottom)
+   509→  ctx.fillStyle = 'rgba(0,0,0,0.1)'
+   510→  ctx.beginPath()
+   511→  ctx.arc(tx + 4 * s, ty - 6 * s, 5 * s, 0, Math.PI)
+   512→  ctx.fill()
+   513→}
+   514→
+   515→function drawLamp(ctx: CanvasRenderingContext2D, lamp: { x: number; y: number }, camX: number, camY: number, vw: number, vh: number, time: number) {
+   516→  const lx = (lamp.x - camX) | 0
+   517→  const ly = (lamp.y - camY) | 0
+   518→  if (lx < -16 || lx > vw + 16 || ly < -30 || ly > vh + 10) return
+   519→
+   520→  // Pole
+   521→  ctx.fillStyle = '#546E7A'
+   522→  ctx.fillRect(lx, ly - 20, 3, 20)
+   523→  ctx.fillStyle = '#37474F'
+   524→  ctx.fillRect(lx - 1, ly - 2, 5, 3)
+   525→
+   526→  // Light fixture
+   527→  ctx.fillStyle = '#455A64'
+   528→  ctx.fillRect(lx - 4, ly - 23, 11, 4)
+   529→  ctx.fillStyle = '#FFF9C4'
+   530→  ctx.fillRect(lx - 2, ly - 21, 7, 3)
+   531→
+   532→  // Warm glow cone
+   533→  const flicker = 0.14 + Math.sin(time * 0.008 + lamp.x) * 0.05
+   534→  ctx.fillStyle = `rgba(255,249,196,${flicker.toFixed(3)})`
+   535→  ctx.beginPath()
+   536→  ctx.moveTo(lx - 3, ly - 18)
+   537→  ctx.lineTo(lx - 14, ly + 6)
+   538→  ctx.lineTo(lx + 14, ly + 6)
+   539→  ctx.lineTo(lx + 6, ly - 18)
+   540→  ctx.closePath()
+   541→  ctx.fill()
+   542→
+   543→  // Radial glow
+   544→  const glowGrad = ctx.createRadialGradient(lx + 1, ly - 20, 0, lx + 1, ly - 20, 24)
+   545→  glowGrad.addColorStop(0, `rgba(255,249,196,${(flicker * 0.9).toFixed(3)})`)
+   546→  glowGrad.addColorStop(1, 'rgba(255,249,196,0)')
+   547→  ctx.fillStyle = glowGrad
+   548→  ctx.fillRect(lx - 24, ly - 44, 50, 50)
+   549→}
+   550→
+   551→function drawCenterMonument(ctx: CanvasRenderingContext2D, camX: number, camY: number, vw: number, vh: number, time: number) {
+   552→  const cx = 1160
+   553→  const cy = 820
+   554→  const mx = (cx - camX) | 0
+   555→  const my = (cy - camY) | 0
+   556→  if (mx < -80 || mx > vw + 80 || my < -80 || my > vh + 80) return
+   557→
+   558→  // Plaza floor
+   559→  ctx.fillStyle = '#1a237e'
+   560→  ctx.fillRect(mx - 40, my + 12, 80, 55)
+   561→  ctx.fillStyle = '#283593'
+   562→  ctx.fillRect(mx - 35, my + 16, 70, 46)
+   563→  // Floor pattern
+   564→  ctx.fillStyle = 'rgba(0,229,255,0.06)'
+   565→  for (let fy = my + 20; fy < my + 55; fy += 8) {
+   566→    ctx.fillRect(mx - 30, fy, 60, 2)
+   567→  }
+   568→
+   569→  // Pedestal
+   570→  ctx.fillStyle = '#37474F'
+   571→  ctx.fillRect(mx - 16, my - 4, 32, 18)
+   572→  ctx.fillStyle = '#455A64'
+   573→  ctx.fillRect(mx - 14, my - 2, 28, 14)
+   574→
+   575→  // Screen bezel
+   576→  ctx.fillStyle = '#263238'
+   577→  ctx.fillRect(mx - 14, my - 34, 28, 30)
+   578→  // Screen content
+   579→  const glow = (Math.sin(time * 0.003) + 1) / 2
+   580→  ctx.fillStyle = `rgba(0,229,255,${(0.3 + glow * 0.5).toFixed(2)})`
+   581→  ctx.fillRect(mx - 12, my - 32, 24, 26)
+   582→  // Scan line
+   583→  ctx.fillStyle = 'rgba(255,255,255,0.08)'
+   584→  const scanY = my - 32 + (time % 50)
+   585→  if (scanY < my - 8) ctx.fillRect(mx - 12, scanY, 24, 2)
+   586→
+   587→  // Text on screen
+   588→  ctx.font = 'bold 8px monospace'
+   589→  ctx.textAlign = 'center'
+   590→  ctx.textBaseline = 'middle'
+   591→  drawStrokedText(ctx, 'S.OS', mx, my - 19, 2, 'rgba(0,0,0,0.8)', '#FFFFFF')
+   592→
+   593→  // Antenna
+   594→  ctx.fillStyle = '#78909C'
+   595→  ctx.fillRect(mx, my - 42, 2, 8)
+   596→  ctx.fillStyle = '#00E5FF'
+   597→  ctx.fillRect(mx - 2, my - 45, 6, 4)
+   598→  ctx.fillStyle = `rgba(0,229,255,${(0.15 + glow * 0.15).toFixed(2)})`
+   599→  ctx.fillRect(mx - 4, my - 47, 10, 8)
+   600→}
+   601→
+   602→/* ═══════════════════ Building Drawing ═══════════════════ */
+   603→
+   604→function drawBuilding(ctx: CanvasRenderingContext2D, b: BuildingData, camX: number, camY: number, vw: number, vh: number, time: number, charX: number, charY: number) {
+   605→  const bx = (b.x - camX) | 0
+   606→  const by = (b.y - camY) | 0
+   607→  if (bx + b.w < -20 || bx > vw + 20 || by + b.h < -40 || by > vh + 20) return
+   608→
+   609→  const bcx = b.x + b.w / 2
+   610→  const bcy = b.y + b.h / 2
+   611→  const dist = Math.hypot(charX + 10 - bcx, charY + 14 - bcy)
+   612→  const isNear = dist < INTERACT_DIST
+   613→  const bRgb = hexToRgb(b.color)
+   614→
+   615→  // ── Entrance glow when near ──
+   616→  if (isNear) {
+   617→    const alpha = Math.min(0.35, (INTERACT_DIST - dist) / INTERACT_DIST * 0.35)
+   618→    const glowRgb = hexToRgb(b.glowColor)
+   619→    const eGrad = ctx.createRadialGradient(bx + (b.w / 2) | 0, by + b.h, 0, bx + (b.w / 2) | 0, by + b.h, 50)
+   620→    eGrad.addColorStop(0, `rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},${(alpha * 0.8).toFixed(3)})`)
+   621→    eGrad.addColorStop(1, `rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},0)`)
+   622→    ctx.fillStyle = eGrad
+   623→    ctx.fillRect(bx + ((b.w / 2 - 50) | 0), by + b.h - 40, 100, 42)
+   624→  }
+   625→
+   626→  // ── Building shadow on ground ──
+   627→  ctx.fillStyle = 'rgba(0,0,0,0.18)'
+   628→  ctx.fillRect(bx + 6, by + b.h, b.w + 4, 8)
+   629→
+   630→  // ── Concrete foundation ──
+   631→  ctx.fillStyle = '#37474F'
+   632→  ctx.fillRect(bx - 4, by + b.h - 3, b.w + 8, 6)
+   633→  const foundGrad = ctx.createLinearGradient(bx, by + b.h - 3, bx, by + b.h + 3)
+   634→  foundGrad.addColorStop(0, '#455A64')
+   635→  foundGrad.addColorStop(0.5, '#37474F')
+   636→  foundGrad.addColorStop(1, '#263238')
+   637→  ctx.fillStyle = foundGrad
+   638→  ctx.fillRect(bx - 4, by + b.h - 3, b.w + 8, 6)
+   639→
+   640→  // ── Main wall with gradient ──
+   641→  const wallGrad = ctx.createLinearGradient(bx, by, bx + b.w, by + b.h)
+   642→  wallGrad.addColorStop(0, lighten(b.color, 0.12))
+   643→  wallGrad.addColorStop(0.3, b.color)
+   644→  wallGrad.addColorStop(0.7, darken(b.color, 0.9))
+   645→  wallGrad.addColorStop(1, darken(b.color, 0.7))
+   646→  ctx.fillStyle = wallGrad
+   647→  ctx.fillRect(bx, by, b.w, b.h)
+   648→
+   649→  // ── Realistic panel texture ──
+   650→  // Horizontal floor lines (story separators)
+   651→  ctx.fillStyle = darken(b.color, 0.6)
+   652→  for (let row = 0; row < b.h; row += 30) {
+   653→    ctx.fillRect(bx, by + row, b.w, 1.5)
+   654→    ctx.fillStyle = lighten(b.color, 0.06)
+   655→    ctx.fillRect(bx, by + row + 1.5, b.w, 0.5)
+   656→    ctx.fillStyle = darken(b.color, 0.6)
+   657→  }
+   658→  // Vertical panel lines
+   659→  ctx.fillStyle = darken(b.color, 0.75)
+   660→  for (let col = 0; col < b.w; col += 40) {
+   661→    ctx.fillRect(bx + col, by, 1, b.h)
+   662→  }
+   663→
+   664→  // ── Ambient occlusion (dark edges) ──
+   665→  // Top edge darkening
+   666→  const topAoGrad = ctx.createLinearGradient(bx, by, bx, by + 8)
+   667→  topAoGrad.addColorStop(0, 'rgba(0,0,0,0.25)')
+   668→  topAoGrad.addColorStop(1, 'rgba(0,0,0,0)')
+   669→  ctx.fillStyle = topAoGrad
+   670→  ctx.fillRect(bx, by, b.w, 8)
+   671→  // Bottom edge darkening
+   672→  const botAoGrad = ctx.createLinearGradient(bx, by + b.h - 10, bx, by + b.h)
+   673→  botAoGrad.addColorStop(0, 'rgba(0,0,0,0)')
+   674→  botAoGrad.addColorStop(1, 'rgba(0,0,0,0.3)')
+   675→  ctx.fillStyle = botAoGrad
+   676→  ctx.fillRect(bx, by + b.h - 10, b.w, 10)
+   677→
+   678→  // ── 3D depth: right side gradient ──
+   679→  const sideGrad = ctx.createLinearGradient(bx + b.w - 14, by, bx + b.w, by)
+   680→  sideGrad.addColorStop(0, 'rgba(0,0,0,0)')
+   681→  sideGrad.addColorStop(0.4, 'rgba(0,0,0,0.12)')
+   682→  sideGrad.addColorStop(1, 'rgba(0,0,0,0.3)')
+   683→  ctx.fillStyle = sideGrad
+   684→  ctx.fillRect(bx + b.w - 14, by, 14, b.h)
+   685→
+   686→  // ── Left edge highlight (light source from left) ──
+   687→  const leftGrad = ctx.createLinearGradient(bx, by, bx + 6, by)
+   688→  leftGrad.addColorStop(0, 'rgba(255,255,255,0.08)')
+   689→  leftGrad.addColorStop(1, 'rgba(255,255,255,0)')
+   690→  ctx.fillStyle = leftGrad
+   691→  ctx.fillRect(bx, by, 6, b.h)
+   692→
+   693→  // ── Style-specific wall details ──
+   694→  if (b.style === 'futuristic') {
+   695→    // Glowing circuit lines with gradient
+   696→    const circGrad = ctx.createLinearGradient(bx + 8, 0, bx + b.w - 8, 0)
+   697→    circGrad.addColorStop(0, 'rgba(0,229,255,0.05)')
+   698→    circGrad.addColorStop(0.3, 'rgba(0,229,255,0.3)')
+   699→    circGrad.addColorStop(0.7, 'rgba(0,229,255,0.3)')
+   700→    circGrad.addColorStop(1, 'rgba(0,229,255,0.05)')
+   701→    ctx.fillStyle = circGrad
+   702→    ctx.fillRect(bx + 8, by + 28, b.w - 16, 1.5)
+   703→    ctx.fillRect(bx + 8, by + 65, b.w - 16, 1.5)
+   704→    ctx.fillRect(bx + 8, by + 102, b.w - 16, 1.5)
+   705→    // Vertical circuit connectors
+   706→    ctx.fillStyle = 'rgba(0,229,255,0.2)'
+   707→    ctx.fillRect(bx + 16, by + 28, 1.5, 37)
+   708→    ctx.fillRect(bx + b.w - 18, by + 65, 1.5, 37)
+   709→    // Circuit nodes with glow
+   710→    ctx.save()
+   711→    ctx.shadowColor = '#00E5FF'
+   712→    ctx.shadowBlur = 4
+   713→    ctx.fillStyle = '#00E5FF'
+   714→    ctx.fillRect(bx + 14, by + 26, 5, 5)
+   715→    ctx.fillRect(bx + b.w - 21, by + 63, 5, 5)
+   716→    ctx.restore()
+   717→    // Holographic display panel
+   718→    const holoAlpha = 0.08 + Math.sin(time * 0.004) * 0.04
+   719→    const holoGrad = ctx.createLinearGradient(bx + b.w - 42, by + 10, bx + b.w - 8, by + 36)
+   720→    holoGrad.addColorStop(0, `rgba(0,229,255,${(holoAlpha + 0.06).toFixed(3)})`)
+   721→    holoGrad.addColorStop(0.5, `rgba(0,229,255,${holoAlpha.toFixed(3)})`)
+   722→    holoGrad.addColorStop(1, `rgba(0,229,255,${(holoAlpha + 0.06).toFixed(3)})`)
+   723→    ctx.fillStyle = holoGrad
+   724→    ctx.fillRect(bx + b.w - 42, by + 10, 34, 26)
+   725→    // Scan line on holographic display
+   726→    ctx.fillStyle = 'rgba(0,229,255,0.15)'
+   727→    ctx.fillRect(bx + b.w - 40, by + 12, 30, 22)
+   728→    // Data lines
+   729→    ctx.fillStyle = 'rgba(0,229,255,0.35)'
+   730→    for (let dy = by + 14; dy < by + 32; dy += 3) {
+   731→      const lineW = 8 + Math.sin(time * 0.005 + dy * 0.2) * 5
+   732→      ctx.fillRect(bx + b.w - 38, dy, lineW, 1)
+   733→    }
+   734→  } else if (b.style === 'tech') {
+   735→    // Server rack units with depth
+   736→    for (let sy = by + 8; sy < by + b.h - 8; sy += 10) {
+   737→      const rackGrad = ctx.createLinearGradient(bx + 8, sy, bx + b.w - 8, sy)
+   738→      rackGrad.addColorStop(0, 'rgba(224,64,251,0.08)')
+   739→      rackGrad.addColorStop(0.5, 'rgba(224,64,251,0.15)')
+   740→      rackGrad.addColorStop(1, 'rgba(224,64,251,0.08)')
+   741→      ctx.fillStyle = rackGrad
+   742→      ctx.fillRect(bx + 8, sy, b.w - 16, 4)
+   743→      // Rack bezel highlight
+   744→      ctx.fillStyle = 'rgba(224,64,251,0.06)'
+   745→      ctx.fillRect(bx + 8, sy, b.w - 16, 1)
+   746→    }
+   747→    // Rack frame
+   748→    ctx.fillStyle = 'rgba(224,64,251,0.1)'
+   749→    ctx.fillRect(bx + 8, by + 8, 2, b.h - 16)
+   750→    ctx.fillRect(bx + b.w - 10, by + 8, 2, b.h - 16)
+   751→    // Status LEDs with glow
+   752→    const leds = [[14, 16], [14, 36], [14, 56], [14, 76], [14, 96]]
+   753→    for (const [lx, ly] of leds) {
+   754→      const ledOn = Math.sin(time * 0.008 + lx + ly) > 0
+   755→      if (ledOn) {
+   756→        ctx.save()
+   757→        ctx.shadowColor = '#00FF88'
+   758→        ctx.shadowBlur = 4
+   759→        ctx.fillStyle = '#00FF88'
+   760→        ctx.fillRect(bx + lx, by + ly, 4, 4)
+   761→        ctx.restore()
+   762→      } else {
+   763→        ctx.fillStyle = '#1B5E20'
+   764→        ctx.fillRect(bx + lx, by + ly, 4, 4)
+   765→      }
+   766→    }
+   767→    // Server labels (small text-like bars)
+   768→    ctx.fillStyle = 'rgba(224,64,251,0.3)'
+   769→    for (let sy = by + 18; sy < by + b.h - 12; sy += 10) {
+   770→      ctx.fillRect(bx + 24, sy, 16, 2)
+   771→      ctx.fillRect(bx + 24, sy + 3, 10, 1)
+   772→    }
+   773→  } else if (b.style === 'industrial') {
+   774→    // Metal pipes with cylindrical gradient
+   775→    for (const pipeOff of [18, 28]) {
+   776→      const pipeGrad = ctx.createLinearGradient(bx + b.w - pipeOff - 4, 0, bx + b.w - pipeOff + 4, 0)
+   777→      pipeGrad.addColorStop(0, '#455A64')
+   778→      pipeGrad.addColorStop(0.3, '#78909C')
+   779→      pipeGrad.addColorStop(0.5, '#90A4AE')
+   780→      pipeGrad.addColorStop(0.7, '#78909C')
+   781→      pipeGrad.addColorStop(1, '#455A64')
+   782→      ctx.fillStyle = pipeGrad
+   783→      ctx.fillRect(bx + b.w - pipeOff - 4, by + 8, 8, b.h - 16)
+   784→    }
+   785→    // Pipe joints
+   786→    ctx.fillStyle = '#546E7A'
+   787→    for (const jy of [14, 50, 86]) {
+   788→      ctx.fillRect(bx + b.w - 24, by + jy, 18, 5)
+   789→      ctx.fillStyle = 'rgba(255,255,255,0.1)'
+   790→      ctx.fillRect(bx + b.w - 24, by + jy, 18, 1)
+   791→      ctx.fillStyle = '#546E7A'
+   792→    }
+   793→    // Exhaust fan
+   794→    ctx.fillStyle = '#263238'
+   795→    ctx.fillRect(bx + 10, by + 10, 24, 24)
+   796→    const fanGrad = ctx.createRadialGradient(bx + 22, by + 22, 0, bx + 22, by + 22, 10)
+   797→    fanGrad.addColorStop(0, '#37474F')
+   798→    fanGrad.addColorStop(1, '#1a1a2e')
+   799→    ctx.fillStyle = fanGrad
+   800→    ctx.fillRect(bx + 12, by + 12, 20, 20)
+   801→    // Spinning fan blades
+   802→    const fanAngle = time * 0.03
+   803→    ctx.strokeStyle = 'rgba(0,229,255,0.25)'
+   804→    ctx.lineWidth = 1.5
+   805→    for (let i = 0; i < 3; i++) {
+   806→      ctx.beginPath()
+   807→      ctx.arc(bx + 22, by + 22, 7, fanAngle + i * 2.1, fanAngle + i * 2.1 + 1.2)
+   808→      ctx.stroke()
+   809→    }
+   810→    // Warning stripes
+   811→    ctx.fillStyle = 'rgba(255,215,0,0.25)'
+   812→    for (let sy = by + b.h - 24; sy < by + b.h - 6; sy += 6) {
+   813→      ctx.fillRect(bx + 6, sy, 14, 3)
+   814→    }
+   815→  } else if (b.style === 'academic') {
+   816→    // Bookshelves with wood texture
+   817→    for (let sy = by + 10; sy < by + b.h - 10; sy += 16) {
+   818→      // Shelf board with gradient
+   819→      const shelfGrad = ctx.createLinearGradient(bx + 8, sy + 10, bx + 8, sy + 12)
+   820→      shelfGrad.addColorStop(0, 'rgba(139,119,101,0.35)')
+   821→      shelfGrad.addColorStop(1, 'rgba(139,119,101,0.15)')
+   822→      ctx.fillStyle = shelfGrad
+   823→      ctx.fillRect(bx + 8, sy, b.w - 26, 11)
+   824→      ctx.fillStyle = 'rgba(139,119,101,0.4)'
+   825→      ctx.fillRect(bx + 8, sy + 10, b.w - 26, 2)
+   826→      // Books with varied colors
+   827→      const bookColors = ['#F44336', '#2196F3', '#4CAF50', '#FF9800', '#9C27B0', '#00BCD4']
+   828→      let bpos = bx + 10
+   829→      for (let bi = 0; bi < 8 && bpos < bx + b.w - 30; bi++) {
+   830→        const bH = 6 + (bi % 3)
+   831→        ctx.fillStyle = bookColors[bi % bookColors.length]
+   832→        ctx.fillRect(bpos, sy + 10 - bH, 3, bH)
+   833→        ctx.fillStyle = 'rgba(255,255,255,0.1)'
+   834→        ctx.fillRect(bpos, sy + 10 - bH, 1, bH)
+   835→        bpos += 4
+   836→      }
+   837→    }
+   838→    // Chalkboard
+   839→    const chalkGrad = ctx.createLinearGradient(bx + 8, by + 6, bx + 8, by + 30)
+   840→    chalkGrad.addColorStop(0, 'rgba(0,77,64,0.35)')
+   841→    chalkGrad.addColorStop(1, 'rgba(0,77,64,0.2)')
+   842→    ctx.fillStyle = chalkGrad
+   843→    ctx.fillRect(bx + 8, by + 6, b.w - 28, 26)
+   844→    ctx.strokeStyle = 'rgba(139,119,101,0.5)'
+   845→    ctx.lineWidth = 2
+   846→    ctx.strokeRect(bx + 8, by + 6, b.w - 28, 26)
+   847→    ctx.fillStyle = 'rgba(255,255,255,0.35)'
+   848→    ctx.font = 'bold 7px monospace'
+   849→    ctx.textAlign = 'left'
+   850→    ctx.fillText('AI/ML', bx + 14, by + 22)
+   851→  } else if (b.style === 'comms') {
+   852→    // Satellite dish with metallic gradient
+   853→    const dishGrad = ctx.createLinearGradient(bx + b.w - 22, by + 10, bx + b.w - 2, by + 30)
+   854→    dishGrad.addColorStop(0, '#78909C')
+   855→    dishGrad.addColorStop(0.5, '#B0BEC5')
+   856→    dishGrad.addColorStop(1, '#78909C')
+   857→    ctx.fillStyle = dishGrad
+   858→    ctx.fillRect(bx + b.w - 22, by + 10, 20, 8)
+   859→    // Dish arm
+   860→    ctx.fillStyle = '#546E7A'
+   861→    ctx.fillRect(bx + b.w - 12, by + 18, 4, 28)
+   862→    // Dish reflector curve
+   863→    ctx.fillStyle = '#90A4AE'
+   864→    ctx.beginPath()
+   865→    ctx.arc(bx + b.w - 12, by + 16, 10, Math.PI * 1.2, Math.PI * 1.8)
+   866→    ctx.fill()
+   867→    // Signal waves
+   868→    const waveAlpha = (Math.sin(time * 0.006) + 1) / 2 * 0.35
+   869→    for (let i = 1; i <= 3; i++) {
+   870→      ctx.strokeStyle = `rgba(255,171,64,${(waveAlpha / i).toFixed(3)})`
+   871→      ctx.lineWidth = 1.5
+   872→      ctx.beginPath()
+   873→      ctx.arc(bx + b.w + 2, by + 20, i * 6, -0.5, 0.5)
+   874→      ctx.stroke()
+   875→    }
+   876→    // Antenna array on roof
+   877→    for (const ax of [24, 48, 72]) {
+   878→      ctx.fillStyle = '#78909C'
+   879→      ctx.fillRect(bx + ax, by - 10, 2, 12)
+   880→      ctx.fillStyle = '#FFAB40'
+   881→      ctx.fillRect(bx + ax - 1, by - 12, 4, 3)
+   882→    }
+   883→  }
+   884→
+   885→  // ── Windows with glass reflection ──
+   886→  const windowGlow = (Math.sin(time * 0.002 + b.x * 0.05) + 1) / 2
+   887→  for (let wy = by + 24; wy < by + b.h - 40; wy += 28) {
+   888→    for (let wx = bx + 22; wx < bx + b.w - 30; wx += 34) {
+   889→      // Window recess (darker frame inset)
+   890→      ctx.fillStyle = '#1a1a2e'
+   891→      ctx.fillRect(wx - 3, wy - 3, 20, 20)
+   892→      // Window frame
+   893→      ctx.fillStyle = '#37474F'
+   894→      ctx.fillRect(wx - 2, wy - 2, 18, 18)
+   895→      // Glass pane with gradient reflection
+   896→      const glassGrad = ctx.createLinearGradient(wx, wy, wx + 14, wy + 14)
+   897→      glassGrad.addColorStop(0, `rgba(200,220,255,${(0.35 + windowGlow * 0.25).toFixed(2)})`)
+   898→      glassGrad.addColorStop(0.3, `rgba(255,249,196,${(0.25 + windowGlow * 0.2).toFixed(2)})`)
+   899→      glassGrad.addColorStop(0.7, `rgba(180,200,240,${(0.15 + windowGlow * 0.15).toFixed(2)})`)
+   900→      glassGrad.addColorStop(1, `rgba(100,120,160,${(0.2 + windowGlow * 0.1).toFixed(2)})`)
+   901→      ctx.fillStyle = glassGrad
+   902→      ctx.fillRect(wx, wy, 14, 14)
+   903→      // Cross frame
+   904→      ctx.fillStyle = '#37474F'
+   905→      ctx.fillRect(wx + 6, wy, 2, 14)
+   906→      ctx.fillRect(wx, wy + 6, 14, 2)
+   907→      // Specular highlight (top-left bright spot)
+   908→      ctx.fillStyle = 'rgba(255,255,255,0.2)'
+   909→      ctx.fillRect(wx + 1, wy + 1, 4, 3)
+   910→      // Bottom-right dim reflection
+   911→      ctx.fillStyle = 'rgba(100,150,255,0.08)'
+   912→      ctx.fillRect(wx + 9, wy + 9, 4, 4)
+   913→    }
+   914→  }
+   915→
+   916→  // ── Entrance door with canopy ──
+   917→  const doorX = bx + ((b.w / 2 - 14) | 0)
+   918→  const doorY = by + b.h - 34
+   919→  // Door recess
+   920→  ctx.fillStyle = '#1a1a2e'
+   921→  ctx.fillRect(doorX - 4, doorY - 4, 36, 38)
+   922→  // Door frame
+   923→  ctx.fillStyle = '#263238'
+   924→  ctx.fillRect(doorX - 2, doorY - 2, 32, 36)
+   925→  // Door body with gradient
+   926→  const doorGrad = ctx.createLinearGradient(doorX, doorY, doorX + 28, doorY)
+   927→  doorGrad.addColorStop(0, '#4E342E')
+   928→  doorGrad.addColorStop(0.3, '#5D4037')
+   929→  doorGrad.addColorStop(0.7, '#4E342E')
+   930→  doorGrad.addColorStop(1, '#3E2723')
+   931→  ctx.fillStyle = doorGrad
+   932→  ctx.fillRect(doorX, doorY, 28, 32)
+   933→  // Door panels with subtle gradient
+   934→  const panelGrad = ctx.createLinearGradient(doorX, doorY, doorX, doorY + 32)
+   935→  panelGrad.addColorStop(0, 'rgba(255,255,255,0.04)')
+   936→  panelGrad.addColorStop(1, 'rgba(0,0,0,0.1)')
+   937→  ctx.fillStyle = panelGrad
+   938→  ctx.fillRect(doorX + 3, doorY + 3, 9, 11)
+   939→  ctx.fillRect(doorX + 15, doorY + 3, 9, 11)
+   940→  ctx.fillRect(doorX + 3, doorY + 17, 9, 11)
+   941→  ctx.fillRect(doorX + 15, doorY + 17, 9, 11)
+   942→  // Door handle (metallic)
+   943→  const handleGrad = ctx.createLinearGradient(doorX + 20, doorY + 14, doorX + 24, doorY + 14)
+   944→  handleGrad.addColorStop(0, '#FFD740')
+   945→  handleGrad.addColorStop(0.5, '#FFF9C4')
+   946→  handleGrad.addColorStop(1, '#FFD740')
+   947→  ctx.fillStyle = handleGrad
+   948→  ctx.fillRect(doorX + 21, doorY + 14, 3, 5)
+   949→  // Light above door with glow
+   950→  ctx.save()
+   951→  ctx.shadowColor = b.glowColor
+   952→  ctx.shadowBlur = 8
+   953→  ctx.fillStyle = `rgba(255,215,64,${(0.4 + Math.sin(time * 0.003 + b.x) * 0.15).toFixed(2)})`
+   954→  ctx.fillRect(doorX + 10, doorY - 4, 10, 3)
+   955→  ctx.restore()
+   956→  // Entrance canopy/awning
+   957→  ctx.fillStyle = darken(b.color, 0.5)
+   958→  ctx.fillRect(doorX - 8, doorY - 8, 44, 4)
+   959→  ctx.fillStyle = lighten(b.color, 0.1)
+   960→  ctx.fillRect(doorX - 8, doorY - 8, 44, 1.5)
+   961→  // Canopy shadow
+   962→  ctx.fillStyle = 'rgba(0,0,0,0.15)'
+   963→  ctx.fillRect(doorX - 6, doorY - 4, 40, 2)
+   964→  // Planter boxes next to door
+   965→  ctx.fillStyle = '#5D4037'
+   966→  ctx.fillRect(doorX - 10, by + b.h - 6, 8, 6)
+   967→  ctx.fillRect(doorX + 30, by + b.h - 6, 8, 6)
+   968→  ctx.fillStyle = '#2E7D32'
+   969→  ctx.fillRect(doorX - 10, by + b.h - 9, 8, 4)
+   970→  ctx.fillRect(doorX + 30, by + b.h - 9, 8, 4)
+   971→
+   972→  // ── Roof with depth ──
+   973→  const roofGrad = ctx.createLinearGradient(bx - 8, by - 22, bx - 8, by)
+   974→  roofGrad.addColorStop(0, lighten(b.color, 0.15))
+   975→  roofGrad.addColorStop(0.3, b.color)
+   976→  roofGrad.addColorStop(1, darken(b.color, 0.65))
+   977→  ctx.fillStyle = roofGrad
+   978→  ctx.fillRect(bx - 8, by - 22, b.w + 16, 24)
+   979→  // Roof edge highlight
+   980→  ctx.fillStyle = 'rgba(255,255,255,0.1)'
+   981→  ctx.fillRect(bx - 6, by - 22, b.w + 12, 1.5)
+   982→  // Roof bottom edge
+   983→  ctx.fillStyle = darken(b.color, 0.55)
+   984→  ctx.fillRect(bx - 8, by - 1, b.w + 16, 3)
+   985→
+   986→  // Roof accent glow
+   987→  const roofPulse = (Math.sin(time * 0.004 + b.x * 0.1) + 1) / 2
+   988→  ctx.save()
+   989→  ctx.globalAlpha = 0.3 + roofPulse * 0.5
+   990→  ctx.shadowColor = b.glowColor
+   991→  ctx.shadowBlur = 6
+   992→  ctx.fillStyle = b.glowColor
+   993→  ctx.fillRect(bx - 6, by - 20, b.w + 12, 2)
+   994→  ctx.restore()
+   995→  ctx.globalAlpha = 1
+   996→
+   997→  // Rooftop antenna
+   998→  ctx.fillStyle = '#78909C'
+   999→  ctx.fillRect(bx + ((b.w / 2) | 0), by - 34, 2, 12)
+  1000→  const antBlink = Math.sin(time * 0.01 + b.x) > 0.5
+  1001→  ctx.save()
+  1002→  if (antBlink) {
+  1003→    ctx.shadowColor = b.glowColor
+  1004→    ctx.shadowBlur = 6
+  1005→  }
+  1006→  ctx.fillStyle = antBlink ? b.glowColor : darken(b.glowColor, 0.5)
+  1007→  ctx.fillRect(bx + ((b.w / 2 - 2) | 0), by - 37, 6, 4)
+  1008→  ctx.restore()
+  1009→
+  1010→  // ── AC Unit on roof with detail ──
+  1011→  ctx.fillStyle = '#455A64'
+  1012→  ctx.fillRect(bx + 12, by - 30, 16, 10)
+  1013→  const acGrad = ctx.createLinearGradient(bx + 12, by - 30, bx + 28, by - 30)
+  1014→  acGrad.addColorStop(0, '#546E7A')
+  1015→  acGrad.addColorStop(0.5, '#607D8B')
+  1016→  acGrad.addColorStop(1, '#455A64')
+  1017→  ctx.fillStyle = acGrad
+  1018→  ctx.fillRect(bx + 13, by - 29, 14, 8)
+  1019→  // Vent grille
+  1020→  ctx.fillStyle = '#37474F'
+  1021→  for (const vx of [bx + 15, bx + 18, bx + 21, bx + 24]) {
+  1022→    ctx.fillRect(vx, by - 27, 1, 4)
+  1023→  }
+  1024→
+  1025→  // ── Neon sign (illuminated acrylic board) ──
+  1026→  ctx.font = 'bold 11px monospace'
+  1027→  ctx.textAlign = 'center'
+  1028→  const signTextW = ctx.measureText(b.name).width
+  1029→  const signW = Math.max(signTextW + 28, b.w * 0.55)
+  1030→  const signH = 22
+  1031→  const signX = bx + ((b.w - signW) / 2) | 0
+  1032→  const signY = by - 58
+  1033→  // Sign backplate (thick metallic)
+  1034→  const backplateGrad = ctx.createLinearGradient(signX, signY - 6, signX, signY + signH + 6)
+  1035→  backplateGrad.addColorStop(0, '#1a1a2e')
+  1036→  backplateGrad.addColorStop(0.5, '#2d2d44')
+  1037→  backplateGrad.addColorStop(1, '#1a1a2e')
+  1038→  ctx.fillStyle = backplateGrad
+  1039→  roundRect(ctx, signX - 6, signY - 6, signW + 12, signH + 12, 6)
+  1040→  ctx.fill()
+  1041→  // Inner dark backing
+  1042→  ctx.fillStyle = 'rgba(0,0,0,0.85)'
+  1043→  roundRect(ctx, signX - 2, signY - 2, signW + 4, signH + 4, 4)
+  1044→  ctx.fill()
+  1045→  // Metallic frame border
+  1046→  ctx.strokeStyle = '#546E7A'
+  1047→  ctx.lineWidth = 2.5
+  1048→  roundRect(ctx, signX - 2, signY - 2, signW + 4, signH + 4, 4)
+  1049→  ctx.stroke()
+  1050→  // Neon glow border
+  1051→  ctx.save()
+  1052→  ctx.shadowColor = b.glowColor
+  1053→  ctx.shadowBlur = 20
+  1054→  ctx.strokeStyle = b.glowColor
+  1055→  ctx.lineWidth = 2
+  1056→  roundRect(ctx, signX, signY, signW, signH, 3)
+  1057→  ctx.stroke()
+  1058→  ctx.restore()
+  1059→  // Sign inner fill with gradient
+  1060→  const sGrad = ctx.createLinearGradient(signX, signY, signX, signY + signH)
+  1061→  sGrad.addColorStop(0, `rgba(${bRgb.r},${bRgb.g},${bRgb.b},0.05)`)
+  1062→  sGrad.addColorStop(0.5, `rgba(${hexToRgb(b.glowColor).r},${hexToRgb(b.glowColor).g},${hexToRgb(b.glowColor).b},0.15)`)
+  1063→  sGrad.addColorStop(1, `rgba(${bRgb.r},${bRgb.g},${bRgb.b},0.05)`)
+  1064→  ctx.fillStyle = sGrad
+  1065→  roundRect(ctx, signX, signY, signW, signH, 3)
+  1066→  ctx.fill()
+  1067→  // Sign text (GLOWING, CENTERED)
+  1068→  drawGlowText(ctx, b.name, bx + (b.w / 2) | 0, signY + signH / 2, b.glowColor, '#FFFFFF', 12)
+  1069→  // Light spill on wall below sign
+  1070→  const spillGrad = ctx.createLinearGradient(signX, signY + signH, signX, signY + signH + 20)
+  1071→  spillGrad.addColorStop(0, `rgba(${hexToRgb(b.glowColor).r},${hexToRgb(b.glowColor).g},${hexToRgb(b.glowColor).b},0.06)`)
+  1072→  spillGrad.addColorStop(1, `rgba(${hexToRgb(b.glowColor).r},${hexToRgb(b.glowColor).g},${hexToRgb(b.glowColor).b},0)`)
+  1073→  ctx.fillStyle = spillGrad
+  1074→  ctx.fillRect(signX, signY + signH, signW, 20)
+  1075→  // Support brackets (metallic)
+  1076→  for (const bracketX of [signX + 8, signX + signW - 11]) {
+  1077→    const brkGrad = ctx.createLinearGradient(bracketX, signY + signH, bracketX + 7, signY + signH)
+  1078→    brkGrad.addColorStop(0, '#546E7A')
+  1079→    brkGrad.addColorStop(0.5, '#78909C')
+  1080→    brkGrad.addColorStop(1, '#546E7A')
+  1081→    ctx.fillStyle = brkGrad
+  1082→    ctx.fillRect(bracketX, signY + signH, 3, 8)
+  1083→    ctx.fillRect(bracketX - 2, signY + signH + 6, 9, 3)
+  1084→  }
+  1085→}
+  1086→
+  1087→/* ═══════════════════ NPC Drawing ═══════════════════ */
+  1088→
+  1089→function drawNPC(ctx: CanvasRenderingContext2D, npc: NPCData, camX: number, camY: number, vw: number, vh: number, charX: number, charY: number, time: number) {
+  1090→  const nx = (npc.x - camX) | 0
+  1091→  const ny = (npc.y - camY) | 0
+  1092→  if (nx < -40 || nx > vw + 40 || ny < -60 || ny > vh + 20) return
+  1093→
+  1094→  const dist = Math.hypot(npc.x - charX - 10, npc.y - charY - 14)
+  1095→  const hoverBob = Math.sin(time * 0.006 + npc.x) * 2
+  1096→  const yOff = npc.type === 'robot' ? hoverBob : 0
+  1097→
+  1098→  if (npc.type === 'robot') {
+  1099→    // ── Robot NPC ──
+  1100→    // Hover shadow
+  1101→    ctx.fillStyle = 'rgba(0,0,0,0.18)'
+  1102→    ctx.beginPath()
+  1103→    ctx.ellipse(nx, ny + 4, 8, 3, 0, 0, Math.PI * 2)
+  1104→    ctx.fill()
+  1105→
+  1106→    // Thruster glow
+  1107→    ctx.fillStyle = `rgba(0,229,255,${(0.18 + Math.sin(time * 0.01) * 0.1).toFixed(2)})`
+  1108→    ctx.fillRect(nx - 5, ny + yOff, 10, 4)
+  1109→    ctx.fillStyle = `rgba(0,229,255,${(0.08 + Math.sin(time * 0.01) * 0.05).toFixed(2)})`
+  1110→    ctx.fillRect(nx - 7, ny + yOff + 2, 14, 3)
+  1111→
+  1112→    // Body
+  1113→    ctx.fillStyle = npc.color
+  1114→    ctx.fillRect(nx - 8, ny - 18 + yOff, 16, 20)
+  1115→    // Body panel
+  1116→    ctx.fillStyle = darken(npc.color, 0.65)
+  1117→    ctx.fillRect(nx - 6, ny - 14 + yOff, 12, 10)
+  1118→    // Chest light
+  1119→    const chestBlink = Math.sin(time * 0.008 + npc.x) > 0
+  1120→    ctx.fillStyle = chestBlink ? '#00FF88' : '#004D40'
+  1121→    ctx.fillRect(nx - 2, ny - 11 + yOff, 4, 4)
+  1122→    if (chestBlink) {
+  1123→      ctx.fillStyle = 'rgba(0,255,136,0.12)'
+  1124→      ctx.fillRect(nx - 4, ny - 13 + yOff, 8, 8)
+  1125→    }
+  1126→    // Body stripe
+  1127→    ctx.fillStyle = lighten(npc.color, 0.35)
+  1128→    ctx.fillRect(nx - 8, ny - 6 + yOff, 16, 2)
+  1129→    // Body highlight
+  1130→    ctx.fillStyle = 'rgba(255,255,255,0.08)'
+  1131→    ctx.fillRect(nx - 8, ny - 18 + yOff, 3, 18)
+  1132→
+  1133→    // Arms
+  1134→    const armBob = Math.sin(time * 0.005) * 2
+  1135→    ctx.fillStyle = '#78909C'
+  1136→    ctx.fillRect(nx - 11, ny - 16 + yOff + armBob, 4, 12)
+  1137→    ctx.fillRect(nx + 7, ny - 16 + yOff - armBob, 4, 12)
+  1138→    // Hands
+  1139→    ctx.fillStyle = '#546E7A'
+  1140→    ctx.fillRect(nx - 11, ny - 5 + yOff + armBob, 4, 3)
+  1141→    ctx.fillRect(nx + 7, ny - 5 + yOff - armBob, 4, 3)
+  1142→
+  1143→    // Head
+  1144→    ctx.fillStyle = '#B0BEC5'
+  1145→    ctx.fillRect(nx - 7, ny - 28 + yOff, 14, 10)
+  1146→    // Visor
+  1147→    ctx.fillStyle = '#263238'
+  1148→    ctx.fillRect(nx - 6, ny - 26 + yOff, 12, 6)
+  1149→    // Visor reflection
+  1150→    ctx.fillStyle = 'rgba(255,255,255,0.06)'
+  1151→    ctx.fillRect(nx - 5, ny - 25 + yOff, 4, 2)
+  1152→    // Eyes (glowing)
+  1153→    const blink = Math.sin(time * 0.005) > 0.92 ? 0 : 1
+  1154→    ctx.fillStyle = npc.color
+  1155→    ctx.fillRect(nx - 3, ny - 24 + yOff, 3, 3 * blink)
+  1156→    ctx.fillRect(nx + 1, ny - 24 + yOff, 3, 3 * blink)
+  1157→    if (blink) {
+  1158→      ctx.fillStyle = `${npc.color}35`
+  1159→      ctx.fillRect(nx - 4, ny - 25 + yOff, 5, 5)
+  1160→      ctx.fillRect(nx, ny - 25 + yOff, 5, 5)
+  1161→    }
+  1162→
+  1163→    // Antenna
+  1164→    ctx.fillStyle = '#78909C'
+  1165→    ctx.fillRect(nx - 1, ny - 32 + yOff, 2, 4)
+  1166→    const antGlow = Math.sin(time * 0.01 + npc.x) > 0
+  1167→    ctx.fillStyle = antGlow ? '#FF1744' : '#4A0000'
+  1168→    ctx.fillRect(nx - 2, ny - 34 + yOff, 4, 3)
+  1169→    if (antGlow) {
+  1170→      ctx.fillStyle = 'rgba(255,23,68,0.15)'
+  1171→      ctx.fillRect(nx - 4, ny - 36 + yOff, 8, 6)
+  1172→    }
+  1173→
+  1174→    // Ear bolts
+  1175→    ctx.fillStyle = '#FFD740'
+  1176→    ctx.fillRect(nx - 8, ny - 24 + yOff, 2, 2)
+  1177→    ctx.fillRect(nx + 6, ny - 24 + yOff, 2, 2)
+  1178→  } else {
+  1179→    // ── Scientist NPC ──
+  1180→    // Lab coat body
+  1181→    ctx.fillStyle = '#ECEFF1'
+  1182→    ctx.fillRect(nx - 8, ny - 18, 16, 22)
+  1183→    // Coat buttons
+  1184→    ctx.fillStyle = '#B0BEC5'
+  1185→    ctx.fillRect(nx - 1, ny - 13, 2, 1)
+  1186→    ctx.fillRect(nx - 1, ny - 9, 2, 1)
+  1187→    ctx.fillRect(nx - 1, ny - 5, 2, 1)
+  1188→    // Coat pocket
+  1189→    ctx.fillStyle = '#CFD8DC'
+  1190→    ctx.fillRect(nx + 3, ny - 8, 5, 5)
+  1191→    // Pen in pocket
+  1192→    ctx.fillStyle = '#2196F3'
+  1193→    ctx.fillRect(nx + 5, ny - 12, 2, 5)
+  1194→    ctx.fillStyle = '#1565C0'
+  1195→    ctx.fillRect(nx + 5, ny - 12, 2, 2)
+  1196→
+  1197→    // Arms
+  1198→    const sArmBob = Math.sin(time * 0.004) * 1
+  1199→    ctx.fillStyle = '#ECEFF1'
+  1200→    ctx.fillRect(nx - 11, ny - 16 + sArmBob, 4, 14)
+  1201→    ctx.fillRect(nx + 7, ny - 16 - sArmBob, 4, 14)
+  1202→    // Hands
+  1203→    ctx.fillStyle = '#FFCCBC'
+  1204→    ctx.fillRect(nx - 11, ny - 3 + sArmBob, 4, 3)
+  1205→    ctx.fillRect(nx + 7, ny - 3 - sArmBob, 4, 3)
+  1206→
+  1207→    // Head
+  1208→    ctx.fillStyle = '#FFCCBC'
+  1209→    ctx.fillRect(nx - 7, ny - 28, 14, 10)
+  1210→    // Hair
+  1211→    ctx.fillStyle = '#5D4037'
+  1212→    ctx.fillRect(nx - 7, ny - 31, 14, 5)
+  1213→    ctx.fillRect(nx - 7, ny - 28, 3, 5)
+  1214→    ctx.fillRect(nx + 4, ny - 28, 3, 5)
+  1215→    // Eyes
+  1216→    ctx.fillStyle = '#212121'
+  1217→    ctx.fillRect(nx - 4, ny - 24, 3, 3)
+  1218→    ctx.fillRect(nx + 2, ny - 24, 3, 3)
+  1219→    // Eye whites
+  1220→    ctx.fillStyle = '#FFFFFF'
+  1221→    ctx.fillRect(nx - 3, ny - 24, 1, 1)
+  1222→    ctx.fillRect(nx + 3, ny - 24, 1, 1)
+  1223→    // Mouth
+  1224→    ctx.fillStyle = '#E57373'
+  1225→    ctx.fillRect(nx - 1, ny - 20, 4, 1)
+  1226→
+  1227→    // Glasses
+  1228→    ctx.fillStyle = '#263238'
+  1229→    ctx.fillRect(nx - 5, ny - 25, 5, 4)
+  1230→    ctx.fillRect(nx + 1, ny - 25, 5, 4)
+  1231→    ctx.fillRect(nx - 1, ny - 24, 2, 1)
+  1232→    // Lens shine
+  1233→    ctx.fillStyle = 'rgba(255,255,255,0.2)'
+  1234→    ctx.fillRect(nx - 4, ny - 24, 2, 2)
+  1235→    ctx.fillRect(nx + 2, ny - 24, 2, 2)
+  1236→    // Ear pieces
+  1237→    ctx.fillStyle = '#263238'
+  1238→    ctx.fillRect(nx - 8, ny - 24, 3, 1)
+  1239→    ctx.fillRect(nx + 6, ny - 24, 3, 1)
+  1240→
+  1241→    // Legs
+  1242→    ctx.fillStyle = '#455A64'
+  1243→    ctx.fillRect(nx - 5, ny + 4, 4, 7)
+  1244→    ctx.fillRect(nx + 2, ny + 4, 4, 7)
+  1245→    // Shoes
+  1246→    ctx.fillStyle = '#263238'
+  1247→    ctx.fillRect(nx - 5, ny + 10, 5, 3)
+  1248→    ctx.fillRect(nx + 2, ny + 10, 5, 3)
+  1249→
+  1250→    // Clipboard
+  1251→    ctx.fillStyle = '#8D6E63'
+  1252→    ctx.fillRect(nx + 9, ny - 14, 6, 10)
+  1253→    ctx.fillStyle = '#FFFFFF'
+  1254→    ctx.fillRect(nx + 10, ny - 12, 4, 6)
+  1255→    // Writing on clipboard
+  1256→    ctx.fillStyle = '#37474F'
+  1257→    ctx.fillRect(nx + 11, ny - 11, 2, 1)
+  1258→    ctx.fillRect(nx + 11, ny - 9, 3, 1)
+  1259→    ctx.fillRect(nx + 11, ny - 7, 2, 1)
+  1260→  }
+  1261→
+  1262→  // ── Guide indicator (arrow pointing to building) ──
+  1263→  if (npc.buildingId) {
+  1264→    const building = BUILDINGS.find(b => b.id === npc.buildingId)
+  1265→    if (building) {
+  1266→      const buildingCx = building.x + building.w / 2
+  1267→      const buildingCy = building.y + building.h / 2
+  1268→      const angle = Math.atan2(buildingCy - npc.y, buildingCx - npc.x)
+  1269→      const rgb = hexToRgb(npc.color)
+  1270→      const arrowPulse = (Math.sin(time * 0.06 + npc.x * 0.1) + 1) / 2
+  1271→
+  1272→      // Arrow pointing toward building (above NPC head)
+  1273→      const arrowDist = 26
+  1274→      const arrowX = nx + Math.cos(angle) * arrowDist
+  1275→      const arrowY = ny - 30 + Math.sin(angle) * 8 + yOff
+  1276→
+  1277→      // Arrow glow
+  1278→      ctx.save()
+  1279→      ctx.shadowColor = npc.color
+  1280→      ctx.shadowBlur = 6 + arrowPulse * 4
+  1281→      ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.6 + arrowPulse * 0.4).toFixed(2)})`
+  1282→      ctx.beginPath()
+  1283→      ctx.moveTo(arrowX + Math.cos(angle) * 5, arrowY + Math.sin(angle) * 5)
+  1284→      ctx.lineTo(arrowX + Math.cos(angle + 2.4) * 4, arrowY + Math.sin(angle + 2.4) * 4)
+  1285→      ctx.lineTo(arrowX + Math.cos(angle - 2.4) * 4, arrowY + Math.sin(angle - 2.4) * 4)
+  1286→      ctx.closePath()
+  1287→      ctx.fill()
+  1288→      ctx.restore()
+  1289→
+  1290→      // Guide badge (small diamond above head)
+  1291→      ctx.fillStyle = npc.color
+  1292→      ctx.beginPath()
+  1293→      ctx.moveTo(nx, ny - 36 + yOff)
+  1294→      ctx.lineTo(nx + 3, ny - 32 + yOff)
+  1295→      ctx.lineTo(nx, ny - 28 + yOff)
+  1296→      ctx.lineTo(nx - 3, ny - 32 + yOff)
+  1297→      ctx.closePath()
+  1298→      ctx.fill()
+  1299→      ctx.fillStyle = 'rgba(255,255,255,0.4)'
+  1300→      ctx.beginPath()
+  1301→      ctx.moveTo(nx - 1, ny - 35 + yOff)
+  1302→      ctx.lineTo(nx + 1, ny - 33 + yOff)
+  1303→      ctx.lineTo(nx, ny - 30 + yOff)
+  1304→      ctx.closePath()
+  1305→      ctx.fill()
+  1306→    }
+  1307→  }
+  1308→
+  1309→  // ── Speech bubble (cloud shape with glow) ──
+  1310→  if (dist < NPC_DIST) {
+  1311→    const alpha = Math.min(1, (NPC_DIST - dist) / 30)
+  1312→    ctx.globalAlpha = alpha
+  1313→    const text = npc.message
+  1314→    ctx.font = 'bold 9px monospace'
+  1315→    const tw = ctx.measureText(text).width
+  1316→    const bw = tw + 28
+  1317→    const bh = 26
+  1318→    const bubX = (nx - bw / 2) | 0
+  1319→    const bubY = ny - (npc.type === 'robot' ? 72 : 76) + yOff - (npc.buildingId ? 12 : 0)
+  1320→
+  1321→    // Cloud bubble shape
+  1322→    ctx.fillStyle = 'rgba(8,12,35,0.95)'
+  1323→    roundRect(ctx, bubX, bubY, bw, bh, 6)
+  1324→    ctx.fill()
+  1325→
+  1326→    // Cloud puffs (top)
+  1327→    ctx.beginPath()
+  1328→    ctx.arc(bubX + 10, bubY + 3, 8, 0, Math.PI * 2)
+  1329→    ctx.arc(bubX + bw / 2, bubY - 2, 9, 0, Math.PI * 2)
+  1330→    ctx.arc(bubX + bw - 10, bubY + 3, 8, 0, Math.PI * 2)
+  1331→    ctx.fill()
+  1332→    // Cloud puffs (bottom)
+  1333→    ctx.beginPath()
+  1334→    ctx.arc(bubX + 12, bubY + bh - 3, 6, 0, Math.PI * 2)
+  1335→    ctx.arc(bubX + bw - 12, bubY + bh - 3, 6, 0, Math.PI * 2)
+  1336→    ctx.fill()
+  1337→
+  1338→    // Tail
+  1339→    ctx.beginPath()
+  1340→    ctx.moveTo(nx - 5, bubY + bh - 3)
+  1341→    ctx.lineTo(nx, bubY + bh + 10)
+  1342→    ctx.lineTo(nx + 5, bubY + bh - 3)
+  1343→    ctx.closePath()
+  1344→    ctx.fill()
+  1345→
+  1346→    // Border glow (BRIGHT)
+  1347→    ctx.save()
+  1348→    ctx.shadowColor = npc.color
+  1349→    ctx.shadowBlur = 10
+  1350→    ctx.strokeStyle = npc.color
+  1351→    ctx.lineWidth = 2
+  1352→    roundRect(ctx, bubX, bubY, bw, bh, 6)
+  1353→    ctx.stroke()
+  1354→    ctx.restore()
+  1355→
+  1356→    // Gradient overlay
+  1357→    const bubGrad = ctx.createLinearGradient(bubX, bubY, bubX, bubY + bh)
+  1358→    bubGrad.addColorStop(0, 'rgba(0,229,255,0.1)')
+  1359→    bubGrad.addColorStop(1, 'rgba(108,99,255,0.06)')
+  1360→    ctx.fillStyle = bubGrad
+  1361→    roundRect(ctx, bubX, bubY, bw, bh, 6)
+  1362→    ctx.fill()
+  1363→
+  1364→    // Inner border
+  1365→    ctx.strokeStyle = 'rgba(255,255,255,0.1)'
+  1366→    ctx.lineWidth = 1
+  1367→    roundRect(ctx, bubX + 2, bubY + 2, bw - 4, bh - 4, 4)
+  1368→    ctx.stroke()
+  1369→
+  1370→    // Text with outline (CLEAR, BOLD)
+  1371→    ctx.textAlign = 'center'
+  1372→    ctx.textBaseline = 'middle'
+  1373→    drawStrokedText(ctx, text, nx, bubY + bh / 2 + 1, 3, 'rgba(0,0,0,0.9)', '#FFFFFF')
+  1374→
+  1375→    ctx.globalAlpha = 1
+  1376→  }
+  1377→}
+  1378→
+  1379→/* ═══════════════════ Interactive Object Drawing ═══════════════════ */
+  1380→
+  1381→function drawCrystal(ctx: CanvasRenderingContext2D, crystal: CrystalData, camX: number, camY: number, vw: number, vh: number, time: number) {
+  1382→  if (crystal.collected) return
+  1383→  const cx = (crystal.x - camX) | 0
+  1384→  const cy = (crystal.y - camY) | 0
+  1385→  if (cx < -20 || cx > vw + 20 || cy < -30 || cy > vh + 20) return
+  1386→
+  1387→  const floatY = Math.sin(time * 0.04 + crystal.x * 0.1) * 3
+  1388→  const rgb = hexToRgb(crystal.color)
+  1389→  const pulse = (Math.sin(time * 0.05 + crystal.y * 0.1) + 1) / 2
+  1390→
+  1391→  // Ground glow
+  1392→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.08 + pulse * 0.06).toFixed(3)})`
+  1393→  ctx.beginPath()
+  1394→  ctx.ellipse(cx, cy + 10, 12, 4, 0, 0, Math.PI * 2)
+  1395→  ctx.fill()
+  1396→
+  1397→  // Crystal diamond shape
+  1398→  const yOff = floatY
+  1399→  ctx.fillStyle = crystal.color
+  1400→  ctx.beginPath()
+  1401→  ctx.moveTo(cx, cy - 10 + yOff)
+  1402→  ctx.lineTo(cx + 6, cy + yOff)
+  1403→  ctx.lineTo(cx, cy + 8 + yOff)
+  1404→  ctx.lineTo(cx - 6, cy + yOff)
+  1405→  ctx.closePath()
+  1406→  ctx.fill()
+  1407→
+  1408→  // Crystal highlight
+  1409→  ctx.fillStyle = `rgba(255,255,255,${(0.3 + pulse * 0.2).toFixed(2)})`
+  1410→  ctx.beginPath()
+  1411→  ctx.moveTo(cx - 1, cy - 8 + yOff)
+  1412→  ctx.lineTo(cx + 3, cy - 1 + yOff)
+  1413→  ctx.lineTo(cx, cy + 1 + yOff)
+  1414→  ctx.lineTo(cx - 3, cy - 2 + yOff)
+  1415→  ctx.closePath()
+  1416→  ctx.fill()
+  1417→
+  1418→  // Crystal inner glow
+  1419→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.3 + pulse * 0.3).toFixed(2)})`
+  1420→  ctx.fillRect(cx - 2, cy - 4 + yOff, 4, 6)
+  1421→
+  1422→  // Outer glow ring
+  1423→  ctx.save()
+  1424→  ctx.shadowColor = crystal.color
+  1425→  ctx.shadowBlur = 12 + pulse * 6
+  1426→  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.25 + pulse * 0.2).toFixed(2)})`
+  1427→  ctx.lineWidth = 1
+  1428→  ctx.beginPath()
+  1429→  ctx.arc(cx, cy + yOff, 10, 0, Math.PI * 2)
+  1430→  ctx.stroke()
+  1431→  ctx.restore()
+  1432→
+  1433→  // Sparkle particles
+  1434→  if (time % 20 < 10) {
+  1435→    ctx.fillStyle = `rgba(255,255,255,${(0.5 + pulse * 0.3).toFixed(2)})`
+  1436→    ctx.fillRect(cx + 4, cy - 6 + yOff, 1, 1)
+  1437→    ctx.fillRect(cx - 5, cy + 3 + yOff, 1, 1)
+  1438→  }
+  1439→
+  1440→  // Label
+  1441→  ctx.font = 'bold 6px monospace'
+  1442→  ctx.textAlign = 'center'
+  1443→  ctx.textBaseline = 'bottom'
+  1444→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.6 + pulse * 0.3).toFixed(2)})`
+  1445→  ctx.fillText(crystal.label, cx, cy - 13 + yOff)
+  1446→}
+  1447→
+  1448→function drawBoostPad(ctx: CanvasRenderingContext2D, pad: BoostPadData, camX: number, camY: number, vw: number, vh: number, time: number) {
+  1449→  const px = (pad.x - camX) | 0
+  1450→  const py = (pad.y - camY) | 0
+  1451→  if (px < -24 || px > vw + 24 || py < -24 || py > vh + 24) return
+  1452→
+  1453→  const rgb = hexToRgb(pad.color)
+  1454→  const pulse = (Math.sin(time * 0.06) + 1) / 2
+  1455→
+  1456→  // Ground glow (larger, brighter)
+  1457→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.1 + pulse * 0.08).toFixed(3)})`
+  1458→  ctx.beginPath()
+  1459→  ctx.ellipse(px, py + 2, 22, 10, 0, 0, Math.PI * 2)
+  1460→  ctx.fill()
+  1461→
+  1462→  // Base platform (brighter)
+  1463→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.15)`
+  1464→  ctx.beginPath()
+  1465→  ctx.ellipse(px, py, 18, 9, 0, 0, Math.PI * 2)
+  1466→  ctx.fill()
+  1467→
+  1468→  // Active ring (thicker, brighter)
+  1469→  ctx.save()
+  1470→  ctx.shadowColor = pad.color
+  1471→  ctx.shadowBlur = 12 + pulse * 10
+  1472→  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.6 + pulse * 0.4).toFixed(2)})`
+  1473→  ctx.lineWidth = 3
+  1474→  ctx.beginPath()
+  1475→  ctx.ellipse(px, py, 15, 7, 0, 0, Math.PI * 2)
+  1476→  ctx.stroke()
+  1477→  ctx.restore()
+  1478→
+  1479→  // Inner ring
+  1480→  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.3 + pulse * 0.2).toFixed(2)})`
+  1481→  ctx.lineWidth = 1.5
+  1482→  ctx.beginPath()
+  1483→  ctx.ellipse(px, py, 8, 4, 0, 0, Math.PI * 2)
+  1484→  ctx.stroke()
+  1485→
+  1486→  // Center dot
+  1487→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.5 + pulse * 0.4).toFixed(2)})`
+  1488→  ctx.beginPath()
+  1489→  ctx.arc(px, py, 2, 0, Math.PI * 2)
+  1490→  ctx.fill()
+  1491→
+  1492→  // Arrow up indicator (bigger)
+  1493→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.7 + pulse * 0.3).toFixed(2)})`
+  1494→  ctx.beginPath()
+  1495→  ctx.moveTo(px, py - 8 - pulse * 4)
+  1496→  ctx.lineTo(px + 4, py - 2 - pulse * 4)
+  1497→  ctx.lineTo(px - 4, py - 2 - pulse * 4)
+  1498→  ctx.closePath()
+  1499→  ctx.fill()
+  1500→
+  1501→  // Speed lines (brighter)
+  1502→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.3 + pulse * 0.2).toFixed(2)})`
+  1503→  ctx.fillRect(px - 10, py - 3 - pulse * 3, 5, 1.5)
+  1504→  ctx.fillRect(px + 6, py - 3 - pulse * 3, 5, 1.5)
+  1505→
+  1506→  // Label
+  1507→  ctx.font = 'bold 6px monospace'
+  1508→  ctx.textAlign = 'center'
+  1509→  ctx.textBaseline = 'bottom'
+  1510→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.6 + pulse * 0.3).toFixed(2)})`
+  1511→  ctx.fillText('BOOST', px, py - 12 - pulse * 4)
+  1512→}
+  1513→
+  1514→function drawTeleporter(ctx: CanvasRenderingContext2D, tp: TeleporterData, camX: number, camY: number, vw: number, vh: number, time: number, isCoolingDown: boolean) {
+  1515→  const tx = (tp.x - camX) | 0
+  1516→  const ty = (tp.y - camY) | 0
+  1517→  if (tx < -30 || tx > vw + 30 || ty < -40 || ty > vh + 24) return
+  1518→
+  1519→  const rgb = hexToRgb(tp.color)
+  1520→  const pulse = (Math.sin(time * 0.04 + tp.x * 0.1) + 1) / 2
+  1521→  const alpha = isCoolingDown ? 0.3 : (0.5 + pulse * 0.4)
+  1522→
+  1523→  // Ground glow (large, prominent)
+  1524→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${isCoolingDown ? 0.03 : (0.08 + pulse * 0.06).toFixed(3)})`
+  1525→  ctx.beginPath()
+  1526→  ctx.ellipse(tx, ty + 6, 28, 12, 0, 0, Math.PI * 2)
+  1527→  ctx.fill()
+  1528→
+  1529→  // Portal base (brighter)
+  1530→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.12)`
+  1531→  ctx.beginPath()
+  1532→  ctx.ellipse(tx, ty + 4, 20, 10, 0, 0, Math.PI * 2)
+  1533→  ctx.fill()
+  1534→
+  1535→  // Outer ring (thicker, brighter)
+  1536→  ctx.save()
+  1537→  ctx.shadowColor = tp.color
+  1538→  ctx.shadowBlur = isCoolingDown ? 6 : 16 + pulse * 12
+  1539→  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha.toFixed(2)})`
+  1540→  ctx.lineWidth = 3
+  1541→  ctx.beginPath()
+  1542→  ctx.ellipse(tx, ty + 2, 18, 10, 0, 0, Math.PI * 2)
+  1543→  ctx.stroke()
+  1544→  ctx.restore()
+  1545→
+  1546→  // Inner vortex (faster spin)
+  1547→  if (!isCoolingDown) {
+  1548→    const spinAngle = time * 0.1
+  1549→    ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.2 + pulse * 0.15).toFixed(2)})`
+  1550→    ctx.beginPath()
+  1551→    ctx.ellipse(tx, ty + 2, 12, 6, spinAngle, 0, Math.PI * 2)
+  1552→    ctx.fill()
+  1553→    ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.12 + pulse * 0.08).toFixed(2)})`
+  1554→    ctx.beginPath()
+  1555→    ctx.ellipse(tx, ty + 2, 6, 3, -spinAngle, 0, Math.PI * 2)
+  1556→    ctx.fill()
+  1557→    // Center bright dot
+  1558→    ctx.fillStyle = `rgba(255,255,255,${(0.3 + pulse * 0.3).toFixed(2)})`
+  1559→    ctx.beginPath()
+  1560→    ctx.arc(tx, ty + 2, 2, 0, Math.PI * 2)
+  1561→    ctx.fill()
+  1562→  }
+  1563→
+  1564→  // Vertical beam (taller, brighter)
+  1565→  if (!isCoolingDown) {
+  1566→    const beamGrad = ctx.createLinearGradient(tx, ty - 40, tx, ty + 4)
+  1567→    beamGrad.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},0)`)
+  1568→    beamGrad.addColorStop(0.3, `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.04 + pulse * 0.03).toFixed(3)})`)
+  1569→    beamGrad.addColorStop(0.7, `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.12 + pulse * 0.08).toFixed(3)})`)
+  1570→    beamGrad.addColorStop(1, `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.2 + pulse * 0.1).toFixed(3)})`)
+  1571→    ctx.fillStyle = beamGrad
+  1572→    ctx.fillRect(tx - 5, ty - 40, 10, 44)
+  1573→    // Beam particles
+  1574→    if (time % 4 < 2) {
+  1575→      ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.4 + pulse * 0.3).toFixed(2)})`
+  1576→      const beamParticleY = ty - 30 + (time % 30)
+  1577→      ctx.fillRect(tx - 1, beamParticleY, 2, 2)
+  1578→      ctx.fillRect(tx + 2, beamParticleY - 10, 1, 1)
+  1579→    }
+  1580→  }
+  1581→
+  1582→  // Label (more prominent)
+  1583→  ctx.font = 'bold 7px monospace'
+  1584→  ctx.textAlign = 'center'
+  1585→  ctx.textBaseline = 'bottom'
+  1586→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.7 + pulse * 0.3).toFixed(2)})`
+  1587→  ctx.fillText(isCoolingDown ? 'COOLDOWN' : 'WARP', tx, ty - 16)
+  1588→  // Direction hint
+  1589→  if (!isCoolingDown) {
+  1590→    ctx.font = 'bold 5px monospace'
+  1591→    ctx.fillStyle = `rgba(255,255,255,${(0.3 + pulse * 0.2).toFixed(2)})`
+  1592→    const targetLabel = tp.id === 'tp1' ? '→ S.EAST' : '→ N.WEST'
+  1593→    ctx.fillText(targetLabel, tx, ty - 8)
+  1594→  }
+  1595→}
+  1596→
+  1597→function drawScoreUI(ctx: CanvasRenderingContext2D, vw: number, vh: number, score: number, totalCrystals: number, hasSpeedBoost: boolean, time: number) {
+  1598→  const uiX = 12
+  1599→  const uiY = vh - 40
+  1600→
+  1601→  // Background
+  1602→  ctx.fillStyle = 'rgba(0,0,0,0.65)'
+  1603→  roundRect(ctx, uiX - 4, uiY - 4, 130, 32, 5)
+  1604→  ctx.fill()
+  1605→  ctx.strokeStyle = 'rgba(0,229,255,0.3)'
+  1606→  ctx.lineWidth = 1
+  1607→  roundRect(ctx, uiX - 4, uiY - 4, 130, 32, 5)
+  1608→  ctx.stroke()
+  1609→
+  1610→  // Crystal icon
+  1611→  ctx.fillStyle = '#00E5FF'
+  1612→  ctx.beginPath()
+  1613→  ctx.moveTo(uiX + 8, uiY + 2)
+  1614→  ctx.lineTo(uiX + 14, uiY + 10)
+  1615→  ctx.lineTo(uiX + 8, uiY + 18)
+  1616→  ctx.lineTo(uiX + 2, uiY + 10)
+  1617→  ctx.closePath()
+  1618→  ctx.fill()
+  1619→  ctx.fillStyle = 'rgba(255,255,255,0.3)'
+  1620→  ctx.beginPath()
+  1621→  ctx.moveTo(uiX + 7, uiY + 4)
+  1622→  ctx.lineTo(uiX + 11, uiY + 9)
+  1623→  ctx.lineTo(uiX + 8, uiY + 12)
+  1624→  ctx.lineTo(uiX + 5, uiY + 8)
+  1625→  ctx.closePath()
+  1626→  ctx.fill()
+  1627→
+  1628→  // Score text
+  1629→  ctx.font = 'bold 10px monospace'
+  1630→  ctx.textAlign = 'left'
+  1631→  ctx.textBaseline = 'middle'
+  1632→  ctx.fillStyle = '#FFFFFF'
+  1633→  ctx.fillText(`${score}/${totalCrystals}`, uiX + 22, uiY + 11)
+  1634→
+  1635→  // Speed boost indicator
+  1636→  if (hasSpeedBoost) {
+  1637→    const boostPulse = (Math.sin(time * 0.1) + 1) / 2
+  1638→    ctx.fillStyle = `rgba(0,229,255,${(0.5 + boostPulse * 0.5).toFixed(2)})`
+  1639→    ctx.font = 'bold 8px monospace'
+  1640→    ctx.fillText('⚡ BOOST', uiX + 70, uiY + 11)
+  1641→  }
+  1642→
+  1643→  // All collected message
+  1644→  if (score >= totalCrystals) {
+  1645→    const glow = (Math.sin(time * 0.05) + 1) / 2
+  1646→    ctx.font = 'bold 8px monospace'
+  1647→    ctx.textAlign = 'left'
+  1648→    ctx.fillStyle = `rgba(105,240,174,${(0.7 + glow * 0.3).toFixed(2)})`
+  1649→    ctx.fillText('ALL FOUND!', uiX + 70, uiY + 11)
+  1650→  }
+  1651→}
+  1652→
+  1653→/* ═══════════════════ Character Drawing ═══════════════════ */
+  1654→
+  1655→function drawCharacter(
+  1656→  ctx: CanvasRenderingContext2D,
+  1657→  screenX: number,
+  1658→  screenY: number,
+  1659→  dir: string,
+  1660→  walkCycle: number,
+  1661→  isMoving: boolean,
+  1662→  idleBob: number,
+  1663→  time: number
+  1664→) {
+  1665→  const idleBobY = isMoving ? 0 : Math.sin(idleBob * 0.06) * 1.5
+  1666→  // Smooth walk bob - slight vertical oscillation
+  1667→  const walkBobY = isMoving ? Math.abs(Math.sin(walkCycle)) * -1.5 : 0
+  1668→  const totalBob = idleBobY + walkBobY
+  1669→
+  1670→  ctx.save()
+  1671→  ctx.translate((screenX) | 0, (screenY + totalBob) | 0)
+  1672→
+  1673→  // Shadow (stretches slightly when walking)
+  1674→  ctx.fillStyle = 'rgba(0,0,0,0.25)'
+  1675→  ctx.beginPath()
+  1676→  const shadowScale = isMoving ? 1.1 : 1
+  1677→  ctx.ellipse(10, 28, 10 * shadowScale, 3, 0, 0, Math.PI * 2)
+  1678→  ctx.fill()
+  1679→
+  1680→  // Walk phase (0 to 2PI cycle)
+  1681→  const phase = walkCycle
+  1682→  const legSwing = isMoving ? Math.sin(phase) * 4 : 0  // How far forward/back each leg goes
+  1683→  const armSwingSmooth = isMoving ? Math.sin(phase) * 3 : 0  // Smooth arm swing
+  1684→  const bodyTilt = isMoving ? Math.sin(phase) * 0.3 : 0  // Very subtle body tilt
+  1685→
+  1686→  // ── Back arm (behind body) ──
+  1687→  const backArmX = dir === 'left' ? 18 : -2
+  1688→  ctx.fillStyle = '#00838F'
+  1689→  const backArmSwing = -armSwingSmooth
+  1690→  ctx.fillRect(backArmX, 12 + backArmSwing, 4, 9)
+  1691→  // Back hand
+  1692→  ctx.fillStyle = '#FFCC80'
+  1693→  ctx.fillRect(backArmX, 20 + backArmSwing, 4, 3)
+  1694→
+  1695→  // ── Back leg ──
+  1696→  const backLegSwing = -legSwing
+  1697→  ctx.fillStyle = '#004D40'
+  1698→  // Upper leg
+  1699→  ctx.fillRect(11 + backLegSwing * 0.3, 19, 5, 6)
+  1700→  // Lower leg (bends at knee)
+  1701→  ctx.fillRect(11 + backLegSwing * 0.6, 24, 5, 6)
+  1702→  // Back shoe
+  1703→  ctx.fillStyle = '#00251a'
+  1704→  const backShoeX = 11 + backLegSwing * 0.6
+  1705→  ctx.fillRect(backShoeX - 1, 29, 6, 2)
+  1706→
+  1707→  // ── Body ──
+  1708→  ctx.fillStyle = '#00E5FF'
+  1709→  ctx.fillRect(2, 10, 16, 10)
+  1710→  // Body stripe (horizontal accent)
+  1711→  ctx.fillStyle = '#00BCD4'
+  1712→  ctx.fillRect(2, 14, 16, 2)
+  1713→  // Body top highlight
+  1714→  ctx.fillStyle = 'rgba(255,255,255,0.12)'
+  1715→  ctx.fillRect(2, 10, 16, 1)
+  1716→  // Chest pocket
+  1717→  ctx.fillStyle = '#00838F'
+  1718→  ctx.fillRect(5, 11, 5, 3)
+  1719→  ctx.fillStyle = '#006064'
+  1720→  ctx.fillRect(5, 13, 5, 1)
+  1721→  // Belt
+  1722→  ctx.fillStyle = '#004D40'
+  1723→  ctx.fillRect(2, 18, 16, 2)
+  1724→  // Belt buckle
+  1725→  ctx.fillStyle = '#FFD740'
+  1726→  ctx.fillRect(8, 18, 4, 2)
+  1727→  // Collar
+  1728→  ctx.fillStyle = '#006064'
+  1729→  ctx.fillRect(5, 10, 10, 1)
+  1730→
+  1731→  // ── Front leg ──
+  1732→  const frontLegSwing = legSwing
+  1733→  ctx.fillStyle = '#006064'
+  1734→  // Upper leg
+  1735→  ctx.fillRect(4 + frontLegSwing * 0.3, 19, 5, 6)
+  1736→  // Lower leg
+  1737→  ctx.fillRect(4 + frontLegSwing * 0.6, 24, 5, 6)
+  1738→  // Front shoe
+  1739→  ctx.fillStyle = '#004D40'
+  1740→  const frontShoeX = 4 + frontLegSwing * 0.6
+  1741→  ctx.fillRect(frontShoeX - 1, 29, 6, 2)
+  1742→  // Shoe sole
+  1743→  ctx.fillStyle = '#00251a'
+  1744→  ctx.fillRect(frontShoeX - 1, 30, 6, 1)
+  1745→
+  1746→  // ── Front arm (in front of body) ──
+  1747→  const frontArmX = dir === 'left' ? -2 : 18
+  1748→  ctx.fillStyle = '#00BCD4'
+  1749→  ctx.fillRect(frontArmX, 12 + armSwingSmooth, 4, 9)
+  1750→  // Front hand
+  1751→  ctx.fillStyle = '#FFE0B2'
+  1752→  ctx.fillRect(frontArmX, 20 + armSwingSmooth, 4, 3)
+  1753→
+  1754→  // ── Head ──
+  1755→  // Slight head bob in walk direction
+  1756→  const headOffX = isMoving ? Math.sin(phase + 0.5) * 0.5 : 0
+  1757→  ctx.fillStyle = '#FFE0B2'
+  1758→  ctx.fillRect(3 + headOffX, 0, 14, 10)
+  1759→
+  1760→  // Hair
+  1761→  ctx.fillStyle = '#4E342E'
+  1762→  ctx.fillRect(3 + headOffX, -1, 14, 5)
+  1763→  if (dir === 'left') ctx.fillRect(3 + headOffX, -1, 3, 7)
+  1764→  else if (dir === 'right') ctx.fillRect(14 + headOffX, -1, 3, 7)
+  1765→  else { ctx.fillRect(3 + headOffX, -1, 3, 6); ctx.fillRect(14 + headOffX, -1, 3, 6) }
+  1766→
+  1767→  // Eyes
+  1768→  ctx.fillStyle = '#212121'
+  1769→  if (dir === 'down') {
+  1770→    ctx.fillRect(6 + headOffX, 5, 3, 3)
+  1771→    ctx.fillRect(11 + headOffX, 5, 3, 3)
+  1772→    ctx.fillStyle = '#FFFFFF'
+  1773→    ctx.fillRect(7 + headOffX, 5, 1, 1)
+  1774→    ctx.fillRect(12 + headOffX, 5, 1, 1)
+  1775→    ctx.fillStyle = '#E57373'
+  1776→    ctx.fillRect(8 + headOffX, 8, 4, 1)
+  1777→  } else if (dir === 'up') {
+  1778→    ctx.fillStyle = '#4E342E'
+  1779→    ctx.fillRect(3 + headOffX, 2, 14, 3)
+  1780→  } else if (dir === 'left') {
+  1781→    ctx.fillRect(5 + headOffX, 5, 3, 3)
+  1782→    ctx.fillRect(9 + headOffX, 5, 3, 3)
+  1783→    ctx.fillStyle = '#FFFFFF'
+  1784→    ctx.fillRect(5 + headOffX, 5, 1, 1)
+  1785→    ctx.fillRect(9 + headOffX, 5, 1, 1)
+  1786→    ctx.fillStyle = '#E57373'
+  1787→    ctx.fillRect(6 + headOffX, 8, 3, 1)
+  1788→  } else {
+  1789→    ctx.fillRect(8 + headOffX, 5, 3, 3)
+  1790→    ctx.fillRect(12 + headOffX, 5, 3, 3)
+  1791→    ctx.fillStyle = '#FFFFFF'
+  1792→    ctx.fillRect(8 + headOffX, 5, 1, 1)
+  1793→    ctx.fillRect(12 + headOffX, 5, 1, 1)
+  1794→    ctx.fillStyle = '#E57373'
+  1795→    ctx.fillRect(11 + headOffX, 8, 3, 1)
+  1796→  }
+  1797→
+  1798→  ctx.restore()
+  1799→}
+  1800→
+  1801→/* ═══════════════════ UI Drawing ═══════════════════ */
+  1802→
+  1803→function drawMinimap(ctx: CanvasRenderingContext2D, vw: number, vh: number, charX: number, charY: number, camX: number, camY: number, time: number) {
+  1804→  const mw = 120
+  1805→  const mh = 90
+  1806→  const mx = vw - mw - 12
+  1807→  const my = 12
+  1808→  const sx = mw / WORLD_W
+  1809→  const sy = mh / WORLD_H
+  1810→
+  1811→  // Background
+  1812→  ctx.fillStyle = 'rgba(0,0,0,0.65)'
+  1813→  roundRect(ctx, mx - 3, my - 3, mw + 6, mh + 6, 4)
+  1814→  ctx.fill()
+  1815→  ctx.fillStyle = 'rgba(13,18,51,0.92)'
+  1816→  ctx.fillRect(mx, my, mw, mh)
+  1817→
+  1818→  // Grid lines
+  1819→  ctx.strokeStyle = 'rgba(0,229,255,0.06)'
+  1820→  ctx.lineWidth = 0.3
+  1821→  for (let gx = mx; gx < mx + mw; gx += 12) {
+  1822→    ctx.beginPath(); ctx.moveTo(gx, my); ctx.lineTo(gx, my + mh); ctx.stroke()
+  1823→  }
+  1824→  for (let gy = my; gy < my + mh; gy += 12) {
+  1825→    ctx.beginPath(); ctx.moveTo(mx, gy); ctx.lineTo(mx + mw, gy); ctx.stroke()
+  1826→  }
+  1827→
+  1828→  // Paths
+  1829→  ctx.fillStyle = 'rgba(44,44,84,0.7)'
+  1830→  for (const p of PATHS) {
+  1831→    ctx.fillRect(mx + p.x * sx, my + p.y * sy, Math.max(p.w * sx, 1), Math.max(p.h * sy, 1))
+  1832→  }
+  1833→
+  1834→  // Buildings
+  1835→  for (const b of BUILDINGS) {
+  1836→    ctx.fillStyle = b.glowColor
+  1837→    ctx.fillRect(mx + b.x * sx, my + b.y * sy, Math.max(b.w * sx, 4), Math.max(b.h * sy, 3))
+  1838→  }
+  1839→
+  1840→  // Crystals on minimap
+  1841→  for (const crystal of CRYSTALS) {
+  1842→    if (crystal.collected) continue
+  1843→    const cPulse = (Math.sin(time * 0.05) + 1) / 2
+  1844→    ctx.fillStyle = `rgba(${hexToRgb(crystal.color).r},${hexToRgb(crystal.color).g},${hexToRgb(crystal.color).b},${(0.5 + cPulse * 0.5).toFixed(2)})`
+  1845→    ctx.fillRect(mx + crystal.x * sx - 1, my + crystal.y * sy - 1, 3, 3)
+  1846→  }
+  1847→
+  1848→  // Teleporters on minimap
+  1849→  for (const tp of TELEPORTERS) {
+  1850→    ctx.fillStyle = tp.color
+  1851→    ctx.fillRect(mx + tp.x * sx - 1, my + tp.y * sy - 1, 4, 4)
+  1852→  }
+  1853→
+  1854→  // Viewport rect
+  1855→  ctx.strokeStyle = 'rgba(255,255,255,0.3)'
+  1856→  ctx.lineWidth = 0.5
+  1857→  ctx.strokeRect(mx + camX * sx, my + camY * sy, vw * sx, vh * sy)
+  1858→
+  1859→  // Character dot with glow
+  1860→  ctx.fillStyle = 'rgba(0,229,255,0.35)'
+  1861→  ctx.fillRect(mx + charX * sx - 2, my + charY * sy - 2, 6, 6)
+  1862→  ctx.fillStyle = '#00E5FF'
+  1863→  ctx.fillRect(mx + charX * sx - 1, my + charY * sy - 1, 4, 4)
+  1864→
+  1865→  // Border
+  1866→  ctx.strokeStyle = 'rgba(0,229,255,0.3)'
+  1867→  ctx.lineWidth = 1
+  1868→  roundRect(ctx, mx - 3, my - 3, mw + 6, mh + 6, 4)
+  1869→  ctx.stroke()
+  1870→
+  1871→  // Label
+  1872→  ctx.fillStyle = 'rgba(0,229,255,0.5)'
+  1873→  ctx.font = '5px monospace'
+  1874→  ctx.textAlign = 'left'
+  1875→  ctx.textBaseline = 'top'
+  1876→  ctx.fillText('MAP', mx + 3, my + 3)
+  1877→}
+  1878→
+  1879→function drawPrompt(ctx: CanvasRenderingContext2D, building: BuildingData | null, camX: number, camY: number, isMobile: boolean, time: number) {
+  1880→  if (!building) return
+  1881→
+  1882→  const bx = (building.x + building.w / 2 - camX) | 0
+  1883→  const by = (building.y + building.h + 20 - camY) | 0
+  1884→  const text = isMobile ? 'Tap [E] to enter' : 'Press E to enter'
+  1885→
+  1886→  ctx.font = 'bold 8px monospace'
+  1887→  const tw = ctx.measureText(text).width
+  1888→  const pw = tw + 18
+  1889→  const ph = 18
+  1890→
+  1891→  const alpha = 0.7 + Math.sin(time * 0.006) * 0.3
+  1892→  ctx.globalAlpha = alpha
+  1893→
+  1894→  // Background pill
+  1895→  ctx.fillStyle = 'rgba(0,0,0,0.82)'
+  1896→  roundRect(ctx, bx - pw / 2, by, pw, ph, 5)
+  1897→  ctx.fill()
+  1898→
+  1899→  // Border with glow
+  1900→  ctx.save()
+  1901→  ctx.shadowColor = building.glowColor
+  1902→  ctx.shadowBlur = 6
+  1903→  ctx.strokeStyle = building.glowColor
+  1904→  ctx.lineWidth = 1.5
+  1905→  roundRect(ctx, bx - pw / 2, by, pw, ph, 5)
+  1906→  ctx.stroke()
+  1907→  ctx.restore()
+  1908→
+  1909→  // Gradient fill
+  1910→  const pGrad = ctx.createLinearGradient(bx - pw / 2, by, bx - pw / 2, by + ph)
+  1911→  pGrad.addColorStop(0, 'rgba(0,229,255,0.1)')
+  1912→  pGrad.addColorStop(1, 'rgba(108,99,255,0.06)')
+  1913→  ctx.fillStyle = pGrad
+  1914→  roundRect(ctx, bx - pw / 2, by, pw, ph, 5)
+  1915→  ctx.fill()
+  1916→
+  1917→  // Text
+  1918→  ctx.textAlign = 'center'
+  1919→  ctx.textBaseline = 'middle'
+  1920→  drawStrokedText(ctx, text, bx, by + ph / 2, 2, 'rgba(0,0,0,0.85)', building.glowColor)
+  1921→
+  1922→  ctx.globalAlpha = 1
+  1923→}
+  1924→
+  1925→/* ═══════════════════ Component ═══════════════════ */
+  1926→
+  1927→export default function PixelWorld({ onBuildingClick }: PixelWorldProps) {
+  1928→  const canvasRef = useRef<HTMLCanvasElement>(null)
+  1929→  const containerRef = useRef<HTMLDivElement>(null)
+  1930→  const offscreenRef = useRef<HTMLCanvasElement | null>(null)
+  1931→  const animRef = useRef(0)
+  1932→  const timeRef = useRef(0)
+  1933→
+  1934→  const stateRef = useRef({
+  1935→    charX: WORLD_W / 2 - 10,
+  1936→    charY: WORLD_H / 2 - 14,
+  1937→    dir: 'down' as 'left' | 'right' | 'up' | 'down',
+  1938→    walkCycle: 0,
+  1939→    isMoving: false,
+  1940→    camX: 0,
+  1941→    camY: 0,
+  1942→    nearBuilding: null as string | null,
+  1943→    idleBob: 0,
+  1944→    targetX: -1,
+  1945→    targetY: -1,
+  1946→    score: 0,
+  1947→    speedBoost: 0,
+  1948→    teleportCooldown: 0,
+  1949→  })
+  1950→
+  1951→  const keysRef = useRef(new Set<string>())
+  1952→  const joystickRef = useRef({ active: false, dx: 0, dy: 0 })
+  1953→  const thumbRef = useRef<HTMLDivElement>(null)
+  1954→  const particlesRef = useRef<Particle[]>([])
+  1955→
+  1956→  const [isMobile, setIsMobile] = useState(false)
+  1957→  const [nearBuilding, setNearBuilding] = useState<string | null>(null)
+  1958→  const [showHelp, setShowHelp] = useState(true)
+  1959→
+  1960→  useEffect(() => {
+  1961→    const check = () => setIsMobile('ontouchstart' in window || navigator.maxTouchPoints > 0)
+  1962→    check()
+  1963→    const onResize = () => check()
+  1964→    window.addEventListener('resize', onResize)
+  1965→    return () => window.removeEventListener('resize', onResize)
+  1966→  }, [])
+  1967→
+  1968→  useEffect(() => {
+  1969→    const t = setTimeout(() => setShowHelp(false), 6000)
+  1970→    return () => clearTimeout(t)
+  1971→  }, [])
+  1972→
+  1973→  const findNearBuilding = useCallback((cx: number, cy: number): BuildingData | null => {
+  1974→    let nearest: BuildingData | null = null
+  1975→    let minDist = INTERACT_DIST
+  1976→    for (const b of BUILDINGS) {
+  1977→      const d = Math.hypot(cx - (b.x + b.w / 2), cy - (b.y + b.h / 2))
+  1978→      if (d < minDist) { minDist = d; nearest = b }
+  1979→    }
+  1980→    return nearest
+  1981→  }, [])
+  1982→
+  1983→  const interact = useCallback(() => {
+  1984→    const s = stateRef.current
+  1985→    const b = findNearBuilding(s.charX + 10, s.charY + 14)
+  1986→    if (b) onBuildingClick(b.id)
+  1987→  }, [onBuildingClick, findNearBuilding])
+  1988→
+  1989→  useEffect(() => {
+  1990→    const onDown = (e: KeyboardEvent) => {
+  1991→      const k = e.key.toLowerCase()
+  1992→      keysRef.current.add(k)
+  1993→      if (k === 'e' || k === 'enter') interact()
+  1994→    }
+  1995→    const onUp = (e: KeyboardEvent) => keysRef.current.delete(e.key.toLowerCase())
+  1996→    window.addEventListener('keydown', onDown)
+  1997→    window.addEventListener('keyup', onUp)
+  1998→    return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp) }
+  1999→  }, [interact])
+  2000→
+
+[showing lines 1-2000 of 2384; use offset=2001 with limit to continue reading]

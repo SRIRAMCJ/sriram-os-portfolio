@@ -1,0 +1,2002 @@
+     1→'use client'
+     2→
+     3→import React, { useRef, useEffect, useCallback, useState } from 'react'
+     4→
+     5→/* ═══════════════════ Types ═══════════════════ */
+     6→
+     7→interface PixelWorldProps {
+     8→  onBuildingClick: (buildingId: string) => void
+     9→}
+    10→
+    11→interface BuildingData {
+    12→  id: string
+    13→  name: string
+    14→  color: string
+    15→  glowColor: string
+    16→  x: number
+    17→  y: number
+    18→  w: number
+    19→  h: number
+    20→  style: 'futuristic' | 'industrial' | 'academic' | 'tech' | 'nature' | 'comms'
+    21→}
+    22→
+    23→interface NPCData {
+    24→  id: string
+    25→  x: number
+    26→  y: number
+    27→  type: 'robot' | 'scientist'
+    28→  message: string
+    29→  color: string
+    30→}
+    31→
+    32→interface Particle {
+    33→  x: number
+    34→  y: number
+    35→  vx: number
+    36→  vy: number
+    37→  life: number
+    38→  maxLife: number
+    39→  color: string
+    40→  size: number
+    41→}
+    42→
+    43→/* ═══════════════════ Constants ═══════════════════ */
+    44→
+    45→const WORLD_W = 2400
+    46→const WORLD_H = 1800
+    47→const PIXEL_SCALE = 2
+    48→const CHAR_SPEED = 4
+    49→const INTERACT_DIST = 85
+    50→const NPC_DIST = 100
+    51→const CAM_LERP = 0.08
+    52→
+    53→/* ═══════════════════ Game Data ═══════════════════ */
+    54→
+    55→const BUILDINGS: BuildingData[] = [
+    56→  { id: 'ai-lab', name: 'AI LAB', color: '#00695C', glowColor: '#00E5FF', x: 180, y: 100, w: 200, h: 150, style: 'futuristic' },
+    57→  { id: 'projects', name: 'PROJECTS', color: '#4A148C', glowColor: '#E040FB', x: 880, y: 100, w: 210, h: 150, style: 'tech' },
+    58→  { id: 'experience', name: 'EXPERIENCE', color: '#880E4F', glowColor: '#FF4081', x: 1560, y: 100, w: 200, h: 150, style: 'industrial' },
+    59→  { id: 'skills', name: 'SKILLS', color: '#1B5E20', glowColor: '#69F0AE', x: 180, y: 1050, w: 200, h: 150, style: 'academic' },
+    60→  { id: 'research', name: 'RESEARCH', color: '#E65100', glowColor: '#FFD740', x: 880, y: 1050, w: 210, h: 150, style: 'academic' },
+    61→  { id: 'contact', name: 'CONTACT', color: '#BF360C', glowColor: '#FFAB40', x: 1560, y: 1050, w: 200, h: 150, style: 'comms' },
+    62→]
+    63→
+    64→const NPCS: NPCData[] = [
+    65→  { id: 'r1', x: 520, y: 350, type: 'robot', message: 'Welcome to SRIRAM.OS!', color: '#00E5FF' },
+    66→  { id: 's1', x: 1100, y: 600, type: 'scientist', message: 'The AI Lab is amazing!', color: '#FFD740' },
+    67→  { id: 'r2', x: 1350, y: 950, type: 'robot', message: 'Projects this way!', color: '#E040FB' },
+    68→  { id: 's2', x: 680, y: 1350, type: 'scientist', message: 'Visit Skills Academy!', color: '#69F0AE' },
+    69→  { id: 'r3', x: 1800, y: 700, type: 'robot', message: 'Experience awaits!', color: '#FF4081' },
+    70→  { id: 's3', x: 1200, y: 1550, type: 'scientist', message: 'Contact Sriram below!', color: '#FFAB40' },
+    71→]
+    72→
+    73→const PATHS = [
+    74→  { x: 180, y: 240, w: 1580, h: 20 },
+    75→  { x: 180, y: 1190, w: 1580, h: 20 },
+    76→  { x: 270, y: 240, w: 20, h: 950 },
+    77→  { x: 960, y: 240, w: 20, h: 950 },
+    78→  { x: 1640, y: 240, w: 20, h: 950 },
+    79→  { x: 270, y: 710, w: 1390, h: 20 },
+    80→]
+    81→
+    82→/* ═══════════════════ Interactive Objects ═══════════════════ */
+    83→
+    84→interface CrystalData {
+    85→  id: string
+    86→  x: number
+    87→  y: number
+    88→  color: string
+    89→  label: string
+    90→  collected: boolean
+    91→}
+    92→
+    93→interface BoostPadData {
+    94→  x: number
+    95→  y: number
+    96→  color: string
+    97→}
+    98→
+    99→interface TeleporterData {
+   100→  id: string
+   101→  x: number
+   102→  y: number
+   103→  targetId: string
+   104→  color: string
+   105→}
+   106→
+   107→const CRYSTALS: CrystalData[] = [
+   108→  { id: 'c1', x: 540, y: 300, color: '#00E5FF', label: 'AI Core', collected: false },
+   109→  { id: 'c2', x: 1200, y: 450, color: '#E040FB', label: 'Data Node', collected: false },
+   110→  { id: 'c3', x: 750, y: 800, color: '#69F0AE', label: 'Skill Gem', collected: false },
+   111→  { id: 'c4', x: 1400, y: 700, color: '#FF4081', label: 'Exp Crystal', collected: false },
+   112→  { id: 'c5', x: 400, y: 1300, color: '#FFD740', label: 'Research Orb', collected: false },
+   113→  { id: 'c6', x: 1050, y: 1400, color: '#FFAB40', label: 'Contact Link', collected: false },
+   114→  { id: 'c7', x: 1700, y: 400, color: '#00E5FF', label: 'Neural Chip', collected: false },
+   115→  { id: 'c8', x: 600, y: 600, color: '#E040FB', label: 'Logic Gate', collected: false },
+   116→  { id: 'c9', x: 1300, y: 1100, color: '#69F0AE', label: 'Quantum Bit', collected: false },
+   117→  { id: 'c10', x: 1100, y: 900, color: '#FFD740', label: 'Gold Token', collected: false },
+   118→]
+   119→
+   120→const BOOST_PADS: BoostPadData[] = [
+   121→  { x: 540, y: 710, color: '#00E5FF' },
+   122→  { x: 1200, y: 710, color: '#E040FB' },
+   123→  { x: 780, y: 1190, color: '#69F0AE' },
+   124→]
+   125→
+   126→const TELEPORTERS: TeleporterData[] = [
+   127→  { id: 'tp1', x: 180, y: 450, targetId: 'tp2', color: '#00E5FF' },
+   128→  { id: 'tp2', x: 1650, y: 1300, targetId: 'tp1', color: '#E040FB' },
+   129→]
+   130→
+   131→/* ═══════════════════ Seeded Random Generators ═══════════════════ */
+   132→
+   133→function makeRng(seed: number) {
+   134→  let s = seed
+   135→  return () => { s = (s * 16807) % 2147483647; return s / 2147483647 }
+   136→}
+   137→
+   138→function genGrass() {
+   139→  const r = makeRng(42)
+   140→  const out: { x: number; y: number; w: number; h: number; s: number }[] = []
+   141→  for (let i = 0; i < 800; i++) {
+   142→    out.push({ x: (r() * WORLD_W) | 0, y: (r() * WORLD_H) | 0, w: (r() * 12 + 4) | 0, h: (r() * 8 + 3) | 0, s: (r() * 5) | 0 })
+   143→  }
+   144→  return out
+   145→}
+   146→
+   147→function genStars() {
+   148→  const r = makeRng(77)
+   149→  const out: { x: number; y: number; b: number; spd: number; size: number }[] = []
+   150→  for (let i = 0; i < 200; i++) {
+   151→    out.push({ x: (r() * WORLD_W * 2) | 0, y: (r() * WORLD_H * 2) | 0, b: r(), spd: r() * 0.03 + 0.008, size: (r() * 2 + 1) | 0 })
+   152→  }
+   153→  return out
+   154→}
+   155→
+   156→function genNebulaClouds() {
+   157→  const r = makeRng(99)
+   158→  const out: { x: number; y: number; rx: number; ry: number; color: string; alpha: number }[] = []
+   159→  const cloudColors = ['#00E5FF', '#6C63FF', '#FF00C8', '#1a237e', '#4A148C', '#006064']
+   160→  for (let i = 0; i < 16; i++) {
+   161→    out.push({
+   162→      x: (r() * WORLD_W * 2) | 0,
+   163→      y: (r() * WORLD_H * 1.5) | 0,
+   164→      rx: (r() * 160 + 80) | 0,
+   165→      ry: (r() * 60 + 30) | 0,
+   166→      color: cloudColors[(r() * cloudColors.length) | 0],
+   167→      alpha: r() * 0.05 + 0.015,
+   168→    })
+   169→  }
+   170→  return out
+   171→}
+   172→
+   173→function genMountains() {
+   174→  const r = makeRng(555)
+   175→  const out: { x: number; h: number; w: number; color: string }[] = []
+   176→  const mColors = ['#0d1b3e', '#0f1f47', '#111d3a', '#0a1530']
+   177→  for (let i = 0; i < 25; i++) {
+   178→    out.push({
+   179→      x: (i * 200 + (r() * 80 - 40)) | 0,
+   180→      h: (r() * 100 + 50) | 0,
+   181→      w: (r() * 160 + 120) | 0,
+   182→      color: mColors[(r() * mColors.length) | 0],
+   183→    })
+   184→  }
+   185→  return out
+   186→}
+   187→
+   188→function genTrees() {
+   189→  const r = makeRng(303)
+   190→  const out: { x: number; y: number; size: number }[] = []
+   191→  for (let i = 0; i < 50; i++) {
+   192→    const tx = (r() * (WORLD_W - 50) + 25) | 0
+   193→    const ty = (r() * (WORLD_H - 50) + 25) | 0
+   194→    const onPath = PATHS.some(p => tx > p.x - 25 && tx < p.x + p.w + 25 && ty > p.y - 25 && ty < p.y + p.h + 25)
+   195→    const onBuilding = BUILDINGS.some(b => tx > b.x - 40 && tx < b.x + b.w + 40 && ty > b.y - 40 && ty < b.y + b.h + 40)
+   196→    if (!onPath && !onBuilding) {
+   197→      out.push({ x: tx, y: ty, size: (r() * 2 + 1) | 0 })
+   198→    }
+   199→  }
+   200→  return out
+   201→}
+   202→
+   203→function genFlowers() {
+   204→  const r = makeRng(555)
+   205→  const colors = ['#FF6B6B', '#FFE66D', '#4ECDC4', '#FF6B9D', '#C7F464', '#AB47BC']
+   206→  const out: { x: number; y: number; c: string }[] = []
+   207→  for (let i = 0; i < 100; i++) {
+   208→    out.push({ x: (r() * WORLD_W) | 0, y: (r() * WORLD_H) | 0, c: colors[(r() * colors.length) | 0] })
+   209→  }
+   210→  return out
+   211→}
+   212→
+   213→function genLamps() {
+   214→  return [
+   215→    { x: 270, y: 450 }, { x: 270, y: 680 }, { x: 270, y: 920 },
+   216→    { x: 960, y: 450 }, { x: 960, y: 680 }, { x: 960, y: 920 },
+   217→    { x: 1640, y: 450 }, { x: 1640, y: 680 }, { x: 1640, y: 920 },
+   218→    { x: 540, y: 240 }, { x: 780, y: 240 }, { x: 1200, y: 240 },
+   219→    { x: 540, y: 1190 }, { x: 780, y: 1190 }, { x: 1200, y: 1190 },
+   220→  ]
+   221→}
+   222→
+   223→const GRASS = genGrass()
+   224→const STARS = genStars()
+   225→const NEBULA_CLOUDS = genNebulaClouds()
+   226→const MOUNTAINS = genMountains()
+   227→const TREES = genTrees()
+   228→const FLOWERS = genFlowers()
+   229→const LAMPS = genLamps()
+   230→
+   231→const GRASS_SHADES = ['#0a2d50', '#0d365a', '#103f64', '#0b3058', '#0e3a5f']
+   232→
+   233→/* ═══════════════════ Color Helpers ═══════════════════ */
+   234→
+   235→function hexToRgb(hex: string) {
+   236→  const r = parseInt(hex.slice(1, 3), 16)
+   237→  const g = parseInt(hex.slice(3, 5), 16)
+   238→  const b = parseInt(hex.slice(5, 7), 16)
+   239→  return { r, g, b }
+   240→}
+   241→
+   242→function darken(hex: string, factor: number): string {
+   243→  const { r, g, b } = hexToRgb(hex)
+   244→  return `rgb(${Math.round(r * factor)},${Math.round(g * factor)},${Math.round(b * factor)})`
+   245→}
+   246→
+   247→function lighten(hex: string, factor: number): string {
+   248→  const { r, g, b } = hexToRgb(hex)
+   249→  return `rgb(${Math.min(255, Math.round(r + (255 - r) * factor))},${Math.min(255, Math.round(g + (255 - g) * factor))},${Math.min(255, Math.round(b + (255 - b) * factor))})`
+   250→}
+   251→
+   252→/* ═══════════════════ Rounded Rect Helper ═══════════════════ */
+   253→
+   254→function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+   255→  ctx.beginPath()
+   256→  ctx.moveTo(x + r, y)
+   257→  ctx.lineTo(x + w - r, y)
+   258→  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+   259→  ctx.lineTo(x + w, y + h - r)
+   260→  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+   261→  ctx.lineTo(x + r, y + h)
+   262→  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+   263→  ctx.lineTo(x, y + r)
+   264→  ctx.quadraticCurveTo(x, y, x + r, y)
+   265→  ctx.closePath()
+   266→}
+   267→
+   268→/* ═══════════════════ Draw Stroked Text ═══════════════════ */
+   269→
+   270→function drawStrokedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, strokeW: number = 2, strokeColor: string = '#000000', fillColor: string = '#FFFFFF') {
+   271→  ctx.textAlign = 'center'
+   272→  ctx.textBaseline = 'middle'
+   273→  ctx.lineWidth = strokeW
+   274→  ctx.strokeStyle = strokeColor
+   275→  ctx.lineJoin = 'round'
+   276→  ctx.miterLimit = 2
+   277→  ctx.strokeText(text, x, y)
+   278→  ctx.fillStyle = fillColor
+   279→  ctx.fillText(text, x, y)
+   280→}
+   281→
+   282→function drawGlowText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, glowColor: string, fillColor: string = '#FFFFFF', fontSize: number = 10) {
+   283→  ctx.textAlign = 'center'
+   284→  ctx.textBaseline = 'middle'
+   285→  ctx.font = `bold ${fontSize}px monospace`
+   286→  // Glow layer
+   287→  ctx.save()
+   288→  ctx.shadowColor = glowColor
+   289→  ctx.shadowBlur = 10
+   290→  ctx.fillStyle = glowColor
+   291→  ctx.fillText(text, x, y)
+   292→  ctx.restore()
+   293→  // Outline
+   294→  ctx.font = `bold ${fontSize}px monospace`
+   295→  ctx.textAlign = 'center'
+   296→  ctx.textBaseline = 'middle'
+   297→  ctx.lineWidth = 2.5
+   298→  ctx.strokeStyle = 'rgba(0,0,0,0.8)'
+   299→  ctx.lineJoin = 'round'
+   300→  ctx.strokeText(text, x, y)
+   301→  // Main fill
+   302→  ctx.fillStyle = fillColor
+   303→  ctx.fillText(text, x, y)
+   304→}
+   305→
+   306→/* ═══════════════════ Background Drawing ═══════════════════ */
+   307→
+   308→function drawBackground(ctx: CanvasRenderingContext2D, vw: number, vh: number, camX: number, camY: number, time: number) {
+   309→  // Deep space gradient
+   310→  const grad = ctx.createLinearGradient(0, 0, 0, vh)
+   311→  grad.addColorStop(0, '#030712')
+   312→  grad.addColorStop(0.3, '#070d1f')
+   313→  grad.addColorStop(0.6, '#0a1030')
+   314→  grad.addColorStop(1, '#0e1545')
+   315→  ctx.fillStyle = grad
+   316→  ctx.fillRect(0, 0, vw, vh)
+   317→
+   318→  // Nebula clouds (parallax 0.12x)
+   319→  for (const cloud of NEBULA_CLOUDS) {
+   320→    const cx = (cloud.x * 0.12 - camX * 0.12) | 0
+   321→    const cy = (cloud.y * 0.12 - camY * 0.12) | 0
+   322→    if (cx + cloud.rx < -20 || cx - cloud.rx > vw + 20 || cy + cloud.ry < -20 || cy - cloud.ry > vh + 20) continue
+   323→    const rgb = hexToRgb(cloud.color)
+   324→    const alpha = cloud.alpha + Math.sin(time * 0.001 + cloud.x * 0.01) * 0.006
+   325→    const cGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, cloud.rx)
+   326→    cGrad.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},${(alpha + 0.03).toFixed(3)})`)
+   327→    cGrad.addColorStop(0.4, `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha.toFixed(3)})`)
+   328→    cGrad.addColorStop(1, `rgba(${rgb.r},${rgb.g},${rgb.b},0)`)
+   329→    ctx.fillStyle = cGrad
+   330→    ctx.beginPath()
+   331→    ctx.ellipse(cx, cy, cloud.rx, cloud.ry, 0, 0, Math.PI * 2)
+   332→    ctx.fill()
+   333→  }
+   334→
+   335→  // Distant mountains (parallax 0.2x)
+   336→  for (const mt of MOUNTAINS) {
+   337→    const mx = (mt.x * 0.2 - camX * 0.2) | 0
+   338→    const my = (vh * 0.6 - camY * 0.2) | 0
+   339→    if (mx + mt.w < -10 || mx > vw + 10) continue
+   340→    ctx.fillStyle = mt.color
+   341→    ctx.beginPath()
+   342→    ctx.moveTo(mx, my)
+   343→    ctx.lineTo(mx + mt.w * 0.45, my - mt.h)
+   344→    ctx.lineTo(mx + mt.w * 0.55, my - mt.h * 0.9)
+   345→    ctx.lineTo(mx + mt.w, my)
+   346→    ctx.closePath()
+   347→    ctx.fill()
+   348→    // Mountain snow cap
+   349→    ctx.fillStyle = 'rgba(0,229,255,0.04)'
+   350→    ctx.beginPath()
+   351→    ctx.moveTo(mx + mt.w * 0.4, my - mt.h * 0.7)
+   352→    ctx.lineTo(mx + mt.w * 0.45, my - mt.h)
+   353→    ctx.lineTo(mx + mt.w * 0.55, my - mt.h * 0.9)
+   354→    ctx.lineTo(mx + mt.w * 0.6, my - mt.h * 0.6)
+   355→    ctx.closePath()
+   356→    ctx.fill()
+   357→  }
+   358→
+   359→  // Stars (parallax 0.35x)
+   360→  for (const st of STARS) {
+   361→    const sx = (st.x * 0.35 - camX * 0.35) | 0
+   362→    const sy = (st.y * 0.35 - camY * 0.35) | 0
+   363→    if (sx < -4 || sx > vw + 4 || sy < -4 || sy > vh + 4) continue
+   364→    const brightness = (Math.sin(time * st.spd * 60 + st.b * 100) + 1) / 2
+   365→    const alpha = 0.3 + brightness * 0.7
+   366→    ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`
+   367→    const s = st.size
+   368→    if (s > 1.5 && brightness > 0.5) {
+   369→      // Bright star with cross sparkle
+   370→      ctx.fillRect(sx, sy, 2, 2)
+   371→      ctx.fillStyle = `rgba(255,255,255,${(alpha * 0.25).toFixed(2)})`
+   372→      ctx.fillRect(sx - 2, sy + 0.5, 6, 1)
+   373→      ctx.fillRect(sx + 0.5, sy - 2, 1, 6)
+   374→    } else {
+   375→      ctx.fillRect(sx, sy, s > 1 ? 2 : 1, s > 1 ? 2 : 1)
+   376→    }
+   377→  }
+   378→
+   379→  // Atmospheric fog at bottom
+   380→  const fogGrad = ctx.createLinearGradient(0, vh * 0.8, 0, vh)
+   381→  fogGrad.addColorStop(0, 'rgba(10,15,40,0)')
+   382→  fogGrad.addColorStop(1, 'rgba(10,15,40,0.3)')
+   383→  ctx.fillStyle = fogGrad
+   384→  ctx.fillRect(0, vh * 0.8, vw, vh * 0.2)
+   385→}
+   386→
+   387→/* ═══════════════════ Ground Drawing ═══════════════════ */
+   388→
+   389→function drawGround(ctx: CanvasRenderingContext2D, vw: number, vh: number, camX: number, camY: number) {
+   390→  // Grass patches with texture
+   391→  for (const g of GRASS) {
+   392→    const gx = (g.x - camX) | 0
+   393→    const gy = (g.y - camY) | 0
+   394→    if (gx < -16 || gx > vw + 16 || gy < -16 || gy > vh + 16) continue
+   395→    ctx.fillStyle = GRASS_SHADES[g.s]
+   396→    ctx.fillRect(gx, gy, g.w, g.h)
+   397→    // Grass blade highlights
+   398→    if (g.s % 2 === 0 && g.w > 5) {
+   399→      ctx.fillStyle = 'rgba(0,229,255,0.025)'
+   400→      ctx.fillRect(gx + 1, gy, 1, g.h)
+   401→    }
+   402→  }
+   403→
+   404→  // Paths with cobblestone texture
+   405→  for (const p of PATHS) {
+   406→    const px = (p.x - camX) | 0
+   407→    const py = (p.y - camY) | 0
+   408→    if (px > vw + p.w || px + p.w < 0 || py > vh + p.h || py + p.h < 0) continue
+   409→    // Base path
+   410→    ctx.fillStyle = '#2c2c54'
+   411→    ctx.fillRect(px, py, p.w, p.h)
+   412→    // Top edge highlight
+   413→    ctx.fillStyle = '#3d3d6b'
+   414→    ctx.fillRect(px, py, p.w, 2)
+   415→    // Bottom edge shadow
+   416→    ctx.fillStyle = 'rgba(0,0,0,0.35)'
+   417→    ctx.fillRect(px, py + p.h - 2, p.w, 2)
+   418→    // Cobblestone pattern
+   419→    ctx.fillStyle = 'rgba(61,61,107,0.35)'
+   420→    for (let cx = px + 5; cx < px + p.w - 5; cx += 10) {
+   421→      for (let cy = py + 3; cy < py + p.h - 3; cy += 6) {
+   422→        ctx.fillRect(cx + (cy % 2) * 5, cy, 7, 4)
+   423→      }
+   424→    }
+   425→    // Path glow lines
+   426→    ctx.fillStyle = 'rgba(0,229,255,0.05)'
+   427→    ctx.fillRect(px + 3, py + 2, p.w - 6, 1)
+   428→    ctx.fillRect(px + 3, py + p.h - 3, p.w - 6, 1)
+   429→    // Center guide line
+   430→    ctx.fillStyle = 'rgba(0,229,255,0.02)'
+   431→    ctx.fillRect(px + 3, py + p.h / 2 - 0.5, p.w - 6, 1)
+   432→  }
+   433→}
+   434→
+   435→function drawFlowers(ctx: CanvasRenderingContext2D, vw: number, vh: number, camX: number, camY: number) {
+   436→  for (const f of FLOWERS) {
+   437→    const fx = (f.x - camX) | 0
+   438→    const fy = (f.y - camY) | 0
+   439→    if (fx < -8 || fx > vw + 8 || fy < -8 || fy > vh + 8) continue
+   440→    ctx.fillStyle = '#2E7D32'
+   441→    ctx.fillRect(fx, fy + 3, 1, 4)
+   442→    ctx.fillStyle = f.c
+   443→    ctx.fillRect(fx - 1, fy, 3, 4)
+   444→    ctx.fillRect(fx, fy - 1, 1, 1)
+   445→    ctx.fillStyle = '#FFF9C4'
+   446→    ctx.fillRect(fx, fy + 1, 1, 1)
+   447→  }
+   448→}
+   449→
+   450→function drawTree(ctx: CanvasRenderingContext2D, tree: { x: number; y: number; size: number }, camX: number, camY: number, vw: number, vh: number) {
+   451→  const tx = (tree.x - camX) | 0
+   452→  const ty = (tree.y - camY) | 0
+   453→  if (tx < -30 || tx > vw + 30 || ty < -45 || ty > vh + 10) return
+   454→  const s = tree.size
+   455→  // Trunk with bark
+   456→  ctx.fillStyle = '#5D4037'
+   457→  ctx.fillRect(tx + 3 * s, ty, 2 * s, 8 * s)
+   458→  ctx.fillStyle = '#4E342E'
+   459→  ctx.fillRect(tx + 3 * s, ty + 2 * s, 1 * s, 1 * s)
+   460→  ctx.fillRect(tx + 4 * s, ty + 5 * s, 1 * s, 1 * s)
+   461→  // Leaves - multiple layers
+   462→  ctx.fillStyle = '#1B5E20'
+   463→  ctx.fillRect(tx, ty - 8 * s, 8 * s, 9 * s)
+   464→  ctx.fillStyle = '#2E7D32'
+   465→  ctx.fillRect(tx + s, ty - 10 * s, 6 * s, 5 * s)
+   466→  ctx.fillStyle = '#388E3C'
+   467→  ctx.fillRect(tx + 2 * s, ty - 12 * s, 4 * s, 3 * s)
+   468→  // Leaf highlights
+   469→  ctx.fillStyle = 'rgba(105,240,174,0.12)'
+   470→  ctx.fillRect(tx + s, ty - 9 * s, 3 * s, 3 * s)
+   471→  // Leaf shadow
+   472→  ctx.fillStyle = 'rgba(0,0,0,0.12)'
+   473→  ctx.fillRect(tx + 5 * s, ty - 8 * s, 3 * s, 5 * s)
+   474→}
+   475→
+   476→function drawLamp(ctx: CanvasRenderingContext2D, lamp: { x: number; y: number }, camX: number, camY: number, vw: number, vh: number, time: number) {
+   477→  const lx = (lamp.x - camX) | 0
+   478→  const ly = (lamp.y - camY) | 0
+   479→  if (lx < -16 || lx > vw + 16 || ly < -30 || ly > vh + 10) return
+   480→
+   481→  // Pole
+   482→  ctx.fillStyle = '#546E7A'
+   483→  ctx.fillRect(lx, ly - 20, 3, 20)
+   484→  ctx.fillStyle = '#37474F'
+   485→  ctx.fillRect(lx - 1, ly - 2, 5, 3)
+   486→
+   487→  // Light fixture
+   488→  ctx.fillStyle = '#455A64'
+   489→  ctx.fillRect(lx - 4, ly - 23, 11, 4)
+   490→  ctx.fillStyle = '#FFF9C4'
+   491→  ctx.fillRect(lx - 2, ly - 21, 7, 3)
+   492→
+   493→  // Warm glow cone
+   494→  const flicker = 0.14 + Math.sin(time * 0.008 + lamp.x) * 0.05
+   495→  ctx.fillStyle = `rgba(255,249,196,${flicker.toFixed(3)})`
+   496→  ctx.beginPath()
+   497→  ctx.moveTo(lx - 3, ly - 18)
+   498→  ctx.lineTo(lx - 14, ly + 6)
+   499→  ctx.lineTo(lx + 14, ly + 6)
+   500→  ctx.lineTo(lx + 6, ly - 18)
+   501→  ctx.closePath()
+   502→  ctx.fill()
+   503→
+   504→  // Radial glow
+   505→  const glowGrad = ctx.createRadialGradient(lx + 1, ly - 20, 0, lx + 1, ly - 20, 24)
+   506→  glowGrad.addColorStop(0, `rgba(255,249,196,${(flicker * 0.9).toFixed(3)})`)
+   507→  glowGrad.addColorStop(1, 'rgba(255,249,196,0)')
+   508→  ctx.fillStyle = glowGrad
+   509→  ctx.fillRect(lx - 24, ly - 44, 50, 50)
+   510→}
+   511→
+   512→function drawCenterMonument(ctx: CanvasRenderingContext2D, camX: number, camY: number, vw: number, vh: number, time: number) {
+   513→  const cx = 1160
+   514→  const cy = 820
+   515→  const mx = (cx - camX) | 0
+   516→  const my = (cy - camY) | 0
+   517→  if (mx < -80 || mx > vw + 80 || my < -80 || my > vh + 80) return
+   518→
+   519→  // Plaza floor
+   520→  ctx.fillStyle = '#1a237e'
+   521→  ctx.fillRect(mx - 40, my + 12, 80, 55)
+   522→  ctx.fillStyle = '#283593'
+   523→  ctx.fillRect(mx - 35, my + 16, 70, 46)
+   524→  // Floor pattern
+   525→  ctx.fillStyle = 'rgba(0,229,255,0.06)'
+   526→  for (let fy = my + 20; fy < my + 55; fy += 8) {
+   527→    ctx.fillRect(mx - 30, fy, 60, 2)
+   528→  }
+   529→
+   530→  // Pedestal
+   531→  ctx.fillStyle = '#37474F'
+   532→  ctx.fillRect(mx - 16, my - 4, 32, 18)
+   533→  ctx.fillStyle = '#455A64'
+   534→  ctx.fillRect(mx - 14, my - 2, 28, 14)
+   535→
+   536→  // Screen bezel
+   537→  ctx.fillStyle = '#263238'
+   538→  ctx.fillRect(mx - 14, my - 34, 28, 30)
+   539→  // Screen content
+   540→  const glow = (Math.sin(time * 0.003) + 1) / 2
+   541→  ctx.fillStyle = `rgba(0,229,255,${(0.3 + glow * 0.5).toFixed(2)})`
+   542→  ctx.fillRect(mx - 12, my - 32, 24, 26)
+   543→  // Scan line
+   544→  ctx.fillStyle = 'rgba(255,255,255,0.08)'
+   545→  const scanY = my - 32 + (time % 50)
+   546→  if (scanY < my - 8) ctx.fillRect(mx - 12, scanY, 24, 2)
+   547→
+   548→  // Text on screen
+   549→  ctx.font = 'bold 8px monospace'
+   550→  ctx.textAlign = 'center'
+   551→  ctx.textBaseline = 'middle'
+   552→  drawStrokedText(ctx, 'S.OS', mx, my - 19, 2, 'rgba(0,0,0,0.8)', '#FFFFFF')
+   553→
+   554→  // Antenna
+   555→  ctx.fillStyle = '#78909C'
+   556→  ctx.fillRect(mx, my - 42, 2, 8)
+   557→  ctx.fillStyle = '#00E5FF'
+   558→  ctx.fillRect(mx - 2, my - 45, 6, 4)
+   559→  ctx.fillStyle = `rgba(0,229,255,${(0.15 + glow * 0.15).toFixed(2)})`
+   560→  ctx.fillRect(mx - 4, my - 47, 10, 8)
+   561→}
+   562→
+   563→/* ═══════════════════ Building Drawing ═══════════════════ */
+   564→
+   565→function drawBuilding(ctx: CanvasRenderingContext2D, b: BuildingData, camX: number, camY: number, vw: number, vh: number, time: number, charX: number, charY: number) {
+   566→  const bx = (b.x - camX) | 0
+   567→  const by = (b.y - camY) | 0
+   568→  if (bx + b.w < -20 || bx > vw + 20 || by + b.h < -40 || by > vh + 20) return
+   569→
+   570→  const bcx = b.x + b.w / 2
+   571→  const bcy = b.y + b.h / 2
+   572→  const dist = Math.hypot(charX + 10 - bcx, charY + 14 - bcy)
+   573→  const isNear = dist < INTERACT_DIST
+   574→
+   575→  // ── Entrance glow when near ──
+   576→  if (isNear) {
+   577→    const alpha = Math.min(0.35, (INTERACT_DIST - dist) / INTERACT_DIST * 0.35)
+   578→    const glowRgb = hexToRgb(b.glowColor)
+   579→    const eGrad = ctx.createRadialGradient(bx + (b.w / 2) | 0, by + b.h - 6, 0, bx + (b.w / 2) | 0, by + b.h - 6, 40)
+   580→    eGrad.addColorStop(0, `rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},${(alpha * 0.8).toFixed(3)})`)
+   581→    eGrad.addColorStop(1, `rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},0)`)
+   582→    ctx.fillStyle = eGrad
+   583→    ctx.fillRect(bx + ((b.w / 2 - 40) | 0), by + b.h - 30, 80, 30)
+   584→  }
+   585→
+   586→  // ── Main wall ──
+   587→  ctx.fillStyle = b.color
+   588→  ctx.fillRect(bx, by, b.w, b.h)
+   589→
+   590→  // ── Brick / panel texture (PROMINENT) ──
+   591→  // Draw thick horizontal mortar lines
+   592→  ctx.fillStyle = darken(b.color, 0.68)
+   593→  for (let row = 0; row < b.h; row += 10) {
+   594→    ctx.fillRect(bx, by + row, b.w, 2)
+   595→  }
+   596→  // Draw thick vertical mortar lines (offset per row for brick pattern)
+   597→  ctx.fillStyle = darken(b.color, 0.68)
+   598→  for (let row = 0; row < b.h; row += 10) {
+   599→    const offset = (row / 10) % 2 === 0 ? 0 : 14
+   600→    for (let col = offset; col < b.w; col += 28) {
+   601→      ctx.fillRect(bx + col, by + row, 2, 10)
+   602→    }
+   603→  }
+   604→  // Brick color variation - alternate brick shading
+   605→  ctx.fillStyle = darken(b.color, 0.88)
+   606→  for (let row = 2; row < b.h - 2; row += 10) {
+   607→    const offset = (row / 10) % 2 === 0 ? 0 : 14
+   608→    for (let col = offset + 2; col < b.w - 2; col += 28) {
+   609→      // Shade every other brick darker
+   610→      if (((col / 28) | 0) % 2 === 0) {
+   611→        ctx.fillRect(bx + col, by + row, 24, 8)
+   612→      }
+   613→    }
+   614→  }
+   615→  // Highlight top edge of each brick row
+   616→  ctx.fillStyle = lighten(b.color, 0.08)
+   617→  for (let row = 2; row < b.h - 2; row += 10) {
+   618→    ctx.fillRect(bx, by + row, b.w, 1)
+   619→  }
+   620→
+   621→  // ── 3D depth: side shade ──
+   622→  ctx.fillStyle = 'rgba(0,0,0,0.22)'
+   623→  ctx.fillRect(bx + b.w - 8, by, 8, b.h)
+   624→  ctx.fillStyle = 'rgba(0,0,0,0.12)'
+   625→  ctx.fillRect(bx + b.w - 14, by, 6, b.h)
+   626→
+   627→  // ── Left highlight ──
+   628→  ctx.fillStyle = 'rgba(255,255,255,0.05)'
+   629→  ctx.fillRect(bx, by, 4, b.h)
+   630→
+   631→  // ── Bottom shadow ──
+   632→  ctx.fillStyle = 'rgba(0,0,0,0.35)'
+   633→  ctx.fillRect(bx, by + b.h - 4, b.w, 4)
+   634→
+   635→  // ── Style-specific wall details (PROMINENT) ──
+   636→  if (b.style === 'futuristic') {
+   637→    // Circuit board lines (thick, glowing)
+   638→    ctx.fillStyle = 'rgba(0,229,255,0.25)'
+   639→    ctx.fillRect(bx + 8, by + 28, b.w - 16, 2)
+   640→    ctx.fillRect(bx + 8, by + 65, b.w - 16, 2)
+   641→    ctx.fillRect(bx + 8, by + 102, b.w - 16, 2)
+   642→    ctx.fillRect(bx + 16, by + 28, 2, 37)
+   643→    ctx.fillRect(bx + b.w - 18, by + 65, 2, 37)
+   644→    // Circuit nodes
+   645→    ctx.fillStyle = '#00E5FF'
+   646→    ctx.fillRect(bx + 14, by + 26, 6, 6)
+   647→    ctx.fillRect(bx + b.w - 22, by + 63, 6, 6)
+   648→    // Holographic panel (large, animated)
+   649→    ctx.fillStyle = `rgba(0,229,255,${(0.1 + Math.sin(time * 0.004) * 0.06).toFixed(3)})`
+   650→    ctx.fillRect(bx + b.w - 40, by + 12, 30, 22)
+   651→    ctx.fillStyle = 'rgba(0,229,255,0.18)'
+   652→    ctx.fillRect(bx + b.w - 38, by + 14, 26, 18)
+   653→    // Data lines inside panel
+   654→    ctx.fillStyle = 'rgba(0,229,255,0.3)'
+   655→    for (let dy = by + 16; dy < by + 30; dy += 3) {
+   656→      const lineW = 10 + Math.sin(time * 0.005 + dy * 0.2) * 6
+   657→      ctx.fillRect(bx + b.w - 36, dy, lineW, 1)
+   658→    }
+   659→  } else if (b.style === 'tech') {
+   660→    // Server rack lines (thick, prominent)
+   661→    ctx.fillStyle = 'rgba(224,64,251,0.15)'
+   662→    for (let sy = by + 8; sy < by + b.h - 8; sy += 8) {
+   663→      ctx.fillRect(bx + 8, sy, b.w - 16, 4)
+   664→    }
+   665→    // Server rack borders
+   666→    ctx.fillStyle = 'rgba(224,64,251,0.1)'
+   667→    ctx.fillRect(bx + 8, by + 8, 2, b.h - 16)
+   668→    ctx.fillRect(bx + b.w - 10, by + 8, 2, b.h - 16)
+   669→    // Blinking status LEDs (bigger, with glow)
+   670→    const leds = [[12, 16], [12, 36], [12, 56], [12, 76], [12, 96]]
+   671→    for (const [lx, ly] of leds) {
+   672→      const ledOn = Math.sin(time * 0.008 + lx + ly) > 0
+   673→      ctx.fillStyle = ledOn ? '#00FF88' : '#1B5E20'
+   674→      ctx.fillRect(bx + lx, by + ly, 5, 5)
+   675→      if (ledOn) {
+   676→        ctx.fillStyle = 'rgba(0,255,136,0.2)'
+   677→        ctx.fillRect(bx + lx - 2, by + ly - 2, 9, 9)
+   678→      }
+   679→    }
+   680→    // Server labels
+   681→    ctx.fillStyle = 'rgba(224,64,251,0.25)'
+   682→    ctx.fillRect(bx + 22, by + 16, 20, 3)
+   683→    ctx.fillRect(bx + 22, by + 36, 20, 3)
+   684→    ctx.fillRect(bx + 22, by + 56, 20, 3)
+   685→  } else if (b.style === 'industrial') {
+   686→    // Thick pipes
+   687→    ctx.fillStyle = '#546E7A'
+   688→    ctx.fillRect(bx + b.w - 18, by + 8, 8, b.h - 16)
+   689→    ctx.fillRect(bx + b.w - 28, by + 8, 8, b.h - 16)
+   690→    // Pipe highlight
+   691→    ctx.fillStyle = 'rgba(255,255,255,0.08)'
+   692→    ctx.fillRect(bx + b.w - 16, by + 8, 2, b.h - 16)
+   693→    ctx.fillRect(bx + b.w - 26, by + 8, 2, b.h - 16)
+   694→    // Pipe joints (big, visible)
+   695→    ctx.fillStyle = '#78909C'
+   696→    ctx.fillRect(bx + b.w - 22, by + 14, 16, 6)
+   697→    ctx.fillRect(bx + b.w - 22, by + 50, 16, 6)
+   698→    ctx.fillRect(bx + b.w - 22, by + 86, 16, 6)
+   699→    // Exhaust fan (large)
+   700→    ctx.fillStyle = '#37474F'
+   701→    ctx.fillRect(bx + 12, by + 12, 22, 22)
+   702→    ctx.fillStyle = '#263238'
+   703→    ctx.fillRect(bx + 14, by + 14, 18, 18)
+   704→    // Fan blades (animated)
+   705→    const fanAngle = time * 0.02
+   706→    ctx.strokeStyle = 'rgba(0,229,255,0.2)'
+   707→    ctx.lineWidth = 2
+   708→    ctx.beginPath()
+   709→    ctx.arc(bx + 23, by + 23, 6, fanAngle, fanAngle + 3)
+   710→    ctx.stroke()
+   711→    ctx.beginPath()
+   712→    ctx.arc(bx + 23, by + 23, 6, fanAngle + 3.14, fanAngle + 6.14)
+   713→    ctx.stroke()
+   714→    // Warning stripes (prominent)
+   715→    ctx.fillStyle = 'rgba(255,215,0,0.2)'
+   716→    for (let sy = by + b.h - 24; sy < by + b.h - 6; sy += 6) {
+   717→      ctx.fillRect(bx + 6, sy, 12, 3)
+   718→    }
+   719→  } else if (b.style === 'academic') {
+   720→    // Bookshelves (prominent)
+   721→    ctx.fillStyle = 'rgba(139,119,101,0.2)'
+   722→    for (let sy = by + 12; sy < by + b.h - 12; sy += 14) {
+   723→      ctx.fillRect(bx + 8, sy, b.w - 24, 10)
+   724→      // Shelf board
+   725→      ctx.fillStyle = 'rgba(139,119,101,0.3)'
+   726→      ctx.fillRect(bx + 8, sy + 9, b.w - 24, 2)
+   727→      ctx.fillStyle = 'rgba(139,119,101,0.2)'
+   728→    }
+   729→    // Book colors on shelves
+   730→    const bookColors = ['#F44336', '#2196F3', '#4CAF50', '#FF9800', '#9C27B0']
+   731→    for (let sy = by + 14; sy < by + b.h - 14; sy += 14) {
+   732→      let bpos = bx + 10
+   733→      for (let bi = 0; bi < 6 && bpos < bx + b.w - 30; bi++) {
+   734→        ctx.fillStyle = bookColors[bi % bookColors.length]
+   735→        ctx.fillRect(bpos, sy, 4, 7)
+   736→        bpos += 6
+   737→      }
+   738→    }
+   739→    // Chalkboard (large, visible)
+   740→    ctx.fillStyle = 'rgba(0,77,64,0.25)'
+   741→    ctx.fillRect(bx + 8, by + 8, b.w - 28, 24)
+   742→    ctx.strokeStyle = 'rgba(139,119,101,0.3)'
+   743→    ctx.lineWidth = 2
+   744→    ctx.strokeRect(bx + 8, by + 8, b.w - 28, 24)
+   745→    // Chalk text
+   746→    ctx.fillStyle = 'rgba(255,255,255,0.3)'
+   747→    ctx.font = 'bold 6px monospace'
+   748→    ctx.textAlign = 'left'
+   749→    ctx.fillText('AI/ML', bx + 16, by + 22)
+   750→  } else if (b.style === 'comms') {
+   751→    // Satellite dish (large, prominent)
+   752→    ctx.fillStyle = '#546E7A'
+   753→    ctx.fillRect(bx + b.w - 12, by + 24, 6, 30)
+   754→    ctx.fillStyle = '#78909C'
+   755→    ctx.fillRect(bx + b.w - 20, by + 18, 22, 10)
+   756→    // Dish reflector
+   757→    ctx.fillStyle = '#90A4AE'
+   758→    ctx.fillRect(bx + b.w - 18, by + 14, 18, 6)
+   759→    // Signal waves (prominent)
+   760→    const waveAlpha = (Math.sin(time * 0.006) + 1) / 2 * 0.3
+   761→    ctx.fillStyle = `rgba(255,171,64,${waveAlpha.toFixed(3)})`
+   762→    ctx.fillRect(bx + b.w + 4, by + 22, 8, 4)
+   763→    ctx.fillRect(bx + b.w + 12, by + 18, 6, 12)
+   764→    ctx.fillRect(bx + b.w + 18, by + 14, 4, 20)
+   765→    // Antenna array on roof (tall)
+   766→    ctx.fillStyle = '#78909C'
+   767→    ctx.fillRect(bx + 24, by - 8, 3, 10)
+   768→    ctx.fillRect(bx + 48, by - 12, 3, 14)
+   769→    ctx.fillRect(bx + 72, by - 8, 3, 10)
+   770→    // Antenna tips
+   771→    ctx.fillStyle = '#FFAB40'
+   772→    ctx.fillRect(bx + 23, by - 10, 5, 3)
+   773→    ctx.fillRect(bx + 47, by - 14, 5, 3)
+   774→    ctx.fillRect(bx + 71, by - 10, 5, 3)
+   775→  }
+   776→
+   777→  // ── Windows with THICK frame and glow ──
+   778→  const windowGlow = (Math.sin(time * 0.002 + b.x * 0.05) + 1) / 2
+   779→  for (let wy = by + 24; wy < by + b.h - 40; wy += 28) {
+   780→    for (let wx = bx + 22; wx < bx + b.w - 30; wx += 34) {
+   781→      // Window glow halo
+   782→      if (windowGlow > 0.25) {
+   783→        ctx.fillStyle = `rgba(255,249,196,${(windowGlow * 0.12).toFixed(3)})`
+   784→        ctx.fillRect(wx - 4, wy - 4, 20, 20)
+   785→      }
+   786→      // Window frame (thick)
+   787→      ctx.fillStyle = '#37474F'
+   788→      ctx.fillRect(wx - 2, wy - 2, 18, 18)
+   789→      // Window pane
+   790→      ctx.fillStyle = `rgba(255,249,196,${(0.5 + windowGlow * 0.35).toFixed(2)})`
+   791→      ctx.fillRect(wx, wy, 14, 14)
+   792→      // Cross frame (thick)
+   793→      ctx.fillStyle = 'rgba(55,71,79,0.85)'
+   794→      ctx.fillRect(wx + 6, wy, 2, 14)
+   795→      ctx.fillRect(wx, wy + 6, 14, 2)
+   796→      // Reflection highlight
+   797→      ctx.fillStyle = 'rgba(255,255,255,0.15)'
+   798→      ctx.fillRect(wx + 1, wy + 1, 5, 5)
+   799→      // Bottom reflection
+   800→      ctx.fillStyle = 'rgba(255,255,255,0.06)'
+   801→      ctx.fillRect(wx + 8, wy + 8, 5, 5)
+   802→    }
+   803→  }
+   804→
+   805→  // ── Door ──
+   806→  const doorX = bx + ((b.w / 2 - 12) | 0)
+   807→  const doorY = by + b.h - 30
+   808→  // Door frame
+   809→  ctx.fillStyle = '#3E2723'
+   810→  ctx.fillRect(doorX - 3, doorY - 3, 30, 33)
+   811→  // Door body
+   812→  ctx.fillStyle = '#5D4037'
+   813→  ctx.fillRect(doorX, doorY, 24, 28)
+   814→  // Door panels
+   815→  ctx.fillStyle = '#4E342E'
+   816→  ctx.fillRect(doorX + 3, doorY + 3, 8, 10)
+   817→  ctx.fillRect(doorX + 13, doorY + 3, 8, 10)
+   818→  ctx.fillRect(doorX + 3, doorY + 16, 8, 9)
+   819→  ctx.fillRect(doorX + 13, doorY + 16, 8, 9)
+   820→  // Door handle
+   821→  ctx.fillStyle = '#FFD740'
+   822→  ctx.fillRect(doorX + 18, doorY + 13, 3, 4)
+   823→  // Light above door
+   824→  ctx.fillStyle = `rgba(255,215,64,${(0.35 + Math.sin(time * 0.003 + b.x) * 0.15).toFixed(2)})`
+   825→  ctx.fillRect(doorX + 8, doorY - 5, 10, 4)
+   826→
+   827→  // ── Roof ──
+   828→  ctx.fillStyle = darken(b.color, 0.88)
+   829→  ctx.fillRect(bx - 8, by - 20, b.w + 16, 22)
+   830→  ctx.fillStyle = lighten(b.color, 0.18)
+   831→  ctx.fillRect(bx - 6, by - 20, b.w + 12, 3)
+   832→  ctx.fillStyle = darken(b.color, 0.68)
+   833→  ctx.fillRect(bx - 8, by - 2, b.w + 16, 4)
+   834→
+   835→  // Roof accent glow
+   836→  const roofPulse = (Math.sin(time * 0.004 + b.x * 0.1) + 1) / 2
+   837→  ctx.globalAlpha = 0.3 + roofPulse * 0.5
+   838→  ctx.fillStyle = b.glowColor
+   839→  ctx.fillRect(bx - 6, by - 18, b.w + 12, 3)
+   840→  ctx.globalAlpha = 1
+   841→
+   842→  // Rooftop antenna
+   843→  ctx.fillStyle = '#78909C'
+   844→  ctx.fillRect(bx + ((b.w / 2) | 0), by - 32, 2, 12)
+   845→  const antBlink = Math.sin(time * 0.01 + b.x) > 0.5
+   846→  ctx.fillStyle = antBlink ? b.glowColor : darken(b.glowColor, 0.5)
+   847→  ctx.fillRect(bx + ((b.w / 2 - 2) | 0), by - 35, 6, 4)
+   848→  if (antBlink) {
+   849→    ctx.fillStyle = `${b.glowColor}18`
+   850→    ctx.fillRect(bx + ((b.w / 2 - 4) | 0), by - 37, 12, 10)
+   851→  }
+   852→
+   853→  // ── AC Unit on roof ──
+   854→  ctx.fillStyle = '#455A64'
+   855→  ctx.fillRect(bx + 12, by - 28, 14, 8)
+   856→  ctx.fillStyle = '#37474F'
+   857→  ctx.fillRect(bx + 14, by - 26, 10, 4)
+   858→  ctx.fillStyle = '#546E7A'
+   859→  for (const vx of [bx + 15, bx + 18, bx + 21, bx + 22]) {
+   860→    ctx.fillRect(vx, by - 25, 1, 2)
+   861→  }
+   862→
+   863→  // ── Neon sign (LARGE, PROMINENT) ──
+   864→  ctx.font = 'bold 11px monospace'
+   865→  ctx.textAlign = 'center'
+   866→  const signTextW = ctx.measureText(b.name).width
+   867→  const signW = Math.max(signTextW + 28, b.w * 0.55)
+   868→  const signH = 20
+   869→  const signX = bx + ((b.w - signW) / 2) | 0
+   870→  const signY = by - 54
+   871→  // Sign backing (metal plate)
+   872→  ctx.fillStyle = '#1a1a2e'
+   873→  roundRect(ctx, signX - 4, signY - 4, signW + 8, signH + 8, 5)
+   874→  ctx.fill()
+   875→  ctx.fillStyle = 'rgba(0,0,0,0.85)'
+   876→  roundRect(ctx, signX - 2, signY - 2, signW + 4, signH + 4, 4)
+   877→  ctx.fill()
+   878→  // Sign border (metallic frame)
+   879→  ctx.strokeStyle = '#546E7A'
+   880→  ctx.lineWidth = 2
+   881→  roundRect(ctx, signX - 2, signY - 2, signW + 4, signH + 4, 4)
+   882→  ctx.stroke()
+   883→  // Sign glow border (neon)
+   884→  ctx.save()
+   885→  ctx.shadowColor = b.glowColor
+   886→  ctx.shadowBlur = 16
+   887→  ctx.strokeStyle = b.glowColor
+   888→  ctx.lineWidth = 1.5
+   889→  roundRect(ctx, signX, signY, signW, signH, 3)
+   890→  ctx.stroke()
+   891→  ctx.restore()
+   892→  // Sign inner fill
+   893→  const sGrad = ctx.createLinearGradient(signX, signY, signX, signY + signH)
+   894→  sGrad.addColorStop(0, 'rgba(0,0,0,0.6)')
+   895→  sGrad.addColorStop(0.5, `rgba(${hexToRgb(b.glowColor).r},${hexToRgb(b.glowColor).g},${hexToRgb(b.glowColor).b},0.12)`)
+   896→  sGrad.addColorStop(1, 'rgba(0,0,0,0.6)')
+   897→  ctx.fillStyle = sGrad
+   898→  roundRect(ctx, signX, signY, signW, signH, 3)
+   899→  ctx.fill()
+   900→  // Sign text (LARGE, GLOWING, CENTERED)
+   901→  drawGlowText(ctx, b.name, bx + (b.w / 2) | 0, signY + signH / 2, b.glowColor, '#FFFFFF', 11)
+   902→  // Light spill below sign
+   903→  ctx.fillStyle = `rgba(${hexToRgb(b.glowColor).r},${hexToRgb(b.glowColor).g},${hexToRgb(b.glowColor).b},0.04)`
+   904→  ctx.fillRect(signX, signY + signH, signW, 10)
+   905→  // Support brackets
+   906→  ctx.fillStyle = '#455A64'
+   907→  ctx.fillRect(signX + 6, signY + signH, 3, 6)
+   908→  ctx.fillRect(signX + signW - 9, signY + signH, 3, 6)
+   909→  ctx.fillStyle = '#37474F'
+   910→  ctx.fillRect(signX + 4, signY + signH + 4, 7, 3)
+   911→  ctx.fillRect(signX + signW - 11, signY + signH + 4, 7, 3)
+   912→}
+   913→
+   914→/* ═══════════════════ NPC Drawing ═══════════════════ */
+   915→
+   916→function drawNPC(ctx: CanvasRenderingContext2D, npc: NPCData, camX: number, camY: number, vw: number, vh: number, charX: number, charY: number, time: number) {
+   917→  const nx = (npc.x - camX) | 0
+   918→  const ny = (npc.y - camY) | 0
+   919→  if (nx < -40 || nx > vw + 40 || ny < -60 || ny > vh + 20) return
+   920→
+   921→  const dist = Math.hypot(npc.x - charX - 10, npc.y - charY - 14)
+   922→  const hoverBob = Math.sin(time * 0.006 + npc.x) * 2
+   923→  const yOff = npc.type === 'robot' ? hoverBob : 0
+   924→
+   925→  if (npc.type === 'robot') {
+   926→    // ── Robot NPC ──
+   927→    // Hover shadow
+   928→    ctx.fillStyle = 'rgba(0,0,0,0.18)'
+   929→    ctx.beginPath()
+   930→    ctx.ellipse(nx, ny + 4, 8, 3, 0, 0, Math.PI * 2)
+   931→    ctx.fill()
+   932→
+   933→    // Thruster glow
+   934→    ctx.fillStyle = `rgba(0,229,255,${(0.18 + Math.sin(time * 0.01) * 0.1).toFixed(2)})`
+   935→    ctx.fillRect(nx - 5, ny + yOff, 10, 4)
+   936→    ctx.fillStyle = `rgba(0,229,255,${(0.08 + Math.sin(time * 0.01) * 0.05).toFixed(2)})`
+   937→    ctx.fillRect(nx - 7, ny + yOff + 2, 14, 3)
+   938→
+   939→    // Body
+   940→    ctx.fillStyle = npc.color
+   941→    ctx.fillRect(nx - 8, ny - 18 + yOff, 16, 20)
+   942→    // Body panel
+   943→    ctx.fillStyle = darken(npc.color, 0.65)
+   944→    ctx.fillRect(nx - 6, ny - 14 + yOff, 12, 10)
+   945→    // Chest light
+   946→    const chestBlink = Math.sin(time * 0.008 + npc.x) > 0
+   947→    ctx.fillStyle = chestBlink ? '#00FF88' : '#004D40'
+   948→    ctx.fillRect(nx - 2, ny - 11 + yOff, 4, 4)
+   949→    if (chestBlink) {
+   950→      ctx.fillStyle = 'rgba(0,255,136,0.12)'
+   951→      ctx.fillRect(nx - 4, ny - 13 + yOff, 8, 8)
+   952→    }
+   953→    // Body stripe
+   954→    ctx.fillStyle = lighten(npc.color, 0.35)
+   955→    ctx.fillRect(nx - 8, ny - 6 + yOff, 16, 2)
+   956→    // Body highlight
+   957→    ctx.fillStyle = 'rgba(255,255,255,0.08)'
+   958→    ctx.fillRect(nx - 8, ny - 18 + yOff, 3, 18)
+   959→
+   960→    // Arms
+   961→    const armBob = Math.sin(time * 0.005) * 2
+   962→    ctx.fillStyle = '#78909C'
+   963→    ctx.fillRect(nx - 11, ny - 16 + yOff + armBob, 4, 12)
+   964→    ctx.fillRect(nx + 7, ny - 16 + yOff - armBob, 4, 12)
+   965→    // Hands
+   966→    ctx.fillStyle = '#546E7A'
+   967→    ctx.fillRect(nx - 11, ny - 5 + yOff + armBob, 4, 3)
+   968→    ctx.fillRect(nx + 7, ny - 5 + yOff - armBob, 4, 3)
+   969→
+   970→    // Head
+   971→    ctx.fillStyle = '#B0BEC5'
+   972→    ctx.fillRect(nx - 7, ny - 28 + yOff, 14, 10)
+   973→    // Visor
+   974→    ctx.fillStyle = '#263238'
+   975→    ctx.fillRect(nx - 6, ny - 26 + yOff, 12, 6)
+   976→    // Visor reflection
+   977→    ctx.fillStyle = 'rgba(255,255,255,0.06)'
+   978→    ctx.fillRect(nx - 5, ny - 25 + yOff, 4, 2)
+   979→    // Eyes (glowing)
+   980→    const blink = Math.sin(time * 0.005) > 0.92 ? 0 : 1
+   981→    ctx.fillStyle = npc.color
+   982→    ctx.fillRect(nx - 3, ny - 24 + yOff, 3, 3 * blink)
+   983→    ctx.fillRect(nx + 1, ny - 24 + yOff, 3, 3 * blink)
+   984→    if (blink) {
+   985→      ctx.fillStyle = `${npc.color}35`
+   986→      ctx.fillRect(nx - 4, ny - 25 + yOff, 5, 5)
+   987→      ctx.fillRect(nx, ny - 25 + yOff, 5, 5)
+   988→    }
+   989→
+   990→    // Antenna
+   991→    ctx.fillStyle = '#78909C'
+   992→    ctx.fillRect(nx - 1, ny - 32 + yOff, 2, 4)
+   993→    const antGlow = Math.sin(time * 0.01 + npc.x) > 0
+   994→    ctx.fillStyle = antGlow ? '#FF1744' : '#4A0000'
+   995→    ctx.fillRect(nx - 2, ny - 34 + yOff, 4, 3)
+   996→    if (antGlow) {
+   997→      ctx.fillStyle = 'rgba(255,23,68,0.15)'
+   998→      ctx.fillRect(nx - 4, ny - 36 + yOff, 8, 6)
+   999→    }
+  1000→
+  1001→    // Ear bolts
+  1002→    ctx.fillStyle = '#FFD740'
+  1003→    ctx.fillRect(nx - 8, ny - 24 + yOff, 2, 2)
+  1004→    ctx.fillRect(nx + 6, ny - 24 + yOff, 2, 2)
+  1005→  } else {
+  1006→    // ── Scientist NPC ──
+  1007→    // Lab coat body
+  1008→    ctx.fillStyle = '#ECEFF1'
+  1009→    ctx.fillRect(nx - 8, ny - 18, 16, 22)
+  1010→    // Coat buttons
+  1011→    ctx.fillStyle = '#B0BEC5'
+  1012→    ctx.fillRect(nx - 1, ny - 13, 2, 1)
+  1013→    ctx.fillRect(nx - 1, ny - 9, 2, 1)
+  1014→    ctx.fillRect(nx - 1, ny - 5, 2, 1)
+  1015→    // Coat pocket
+  1016→    ctx.fillStyle = '#CFD8DC'
+  1017→    ctx.fillRect(nx + 3, ny - 8, 5, 5)
+  1018→    // Pen in pocket
+  1019→    ctx.fillStyle = '#2196F3'
+  1020→    ctx.fillRect(nx + 5, ny - 12, 2, 5)
+  1021→    ctx.fillStyle = '#1565C0'
+  1022→    ctx.fillRect(nx + 5, ny - 12, 2, 2)
+  1023→
+  1024→    // Arms
+  1025→    const sArmBob = Math.sin(time * 0.004) * 1
+  1026→    ctx.fillStyle = '#ECEFF1'
+  1027→    ctx.fillRect(nx - 11, ny - 16 + sArmBob, 4, 14)
+  1028→    ctx.fillRect(nx + 7, ny - 16 - sArmBob, 4, 14)
+  1029→    // Hands
+  1030→    ctx.fillStyle = '#FFCCBC'
+  1031→    ctx.fillRect(nx - 11, ny - 3 + sArmBob, 4, 3)
+  1032→    ctx.fillRect(nx + 7, ny - 3 - sArmBob, 4, 3)
+  1033→
+  1034→    // Head
+  1035→    ctx.fillStyle = '#FFCCBC'
+  1036→    ctx.fillRect(nx - 7, ny - 28, 14, 10)
+  1037→    // Hair
+  1038→    ctx.fillStyle = '#5D4037'
+  1039→    ctx.fillRect(nx - 7, ny - 31, 14, 5)
+  1040→    ctx.fillRect(nx - 7, ny - 28, 3, 5)
+  1041→    ctx.fillRect(nx + 4, ny - 28, 3, 5)
+  1042→    // Eyes
+  1043→    ctx.fillStyle = '#212121'
+  1044→    ctx.fillRect(nx - 4, ny - 24, 3, 3)
+  1045→    ctx.fillRect(nx + 2, ny - 24, 3, 3)
+  1046→    // Eye whites
+  1047→    ctx.fillStyle = '#FFFFFF'
+  1048→    ctx.fillRect(nx - 3, ny - 24, 1, 1)
+  1049→    ctx.fillRect(nx + 3, ny - 24, 1, 1)
+  1050→    // Mouth
+  1051→    ctx.fillStyle = '#E57373'
+  1052→    ctx.fillRect(nx - 1, ny - 20, 4, 1)
+  1053→
+  1054→    // Glasses
+  1055→    ctx.fillStyle = '#263238'
+  1056→    ctx.fillRect(nx - 5, ny - 25, 5, 4)
+  1057→    ctx.fillRect(nx + 1, ny - 25, 5, 4)
+  1058→    ctx.fillRect(nx - 1, ny - 24, 2, 1)
+  1059→    // Lens shine
+  1060→    ctx.fillStyle = 'rgba(255,255,255,0.2)'
+  1061→    ctx.fillRect(nx - 4, ny - 24, 2, 2)
+  1062→    ctx.fillRect(nx + 2, ny - 24, 2, 2)
+  1063→    // Ear pieces
+  1064→    ctx.fillStyle = '#263238'
+  1065→    ctx.fillRect(nx - 8, ny - 24, 3, 1)
+  1066→    ctx.fillRect(nx + 6, ny - 24, 3, 1)
+  1067→
+  1068→    // Legs
+  1069→    ctx.fillStyle = '#455A64'
+  1070→    ctx.fillRect(nx - 5, ny + 4, 4, 7)
+  1071→    ctx.fillRect(nx + 2, ny + 4, 4, 7)
+  1072→    // Shoes
+  1073→    ctx.fillStyle = '#263238'
+  1074→    ctx.fillRect(nx - 5, ny + 10, 5, 3)
+  1075→    ctx.fillRect(nx + 2, ny + 10, 5, 3)
+  1076→
+  1077→    // Clipboard
+  1078→    ctx.fillStyle = '#8D6E63'
+  1079→    ctx.fillRect(nx + 9, ny - 14, 6, 10)
+  1080→    ctx.fillStyle = '#FFFFFF'
+  1081→    ctx.fillRect(nx + 10, ny - 12, 4, 6)
+  1082→    // Writing on clipboard
+  1083→    ctx.fillStyle = '#37474F'
+  1084→    ctx.fillRect(nx + 11, ny - 11, 2, 1)
+  1085→    ctx.fillRect(nx + 11, ny - 9, 3, 1)
+  1086→    ctx.fillRect(nx + 11, ny - 7, 2, 1)
+  1087→  }
+  1088→
+  1089→  // ── Speech bubble (cloud shape with glow) ──
+  1090→  if (dist < NPC_DIST) {
+  1091→    const alpha = Math.min(1, (NPC_DIST - dist) / 30)
+  1092→    ctx.globalAlpha = alpha
+  1093→    const text = npc.message
+  1094→    ctx.font = 'bold 9px monospace'
+  1095→    const tw = ctx.measureText(text).width
+  1096→    const bw = tw + 28
+  1097→    const bh = 26
+  1098→    const bubX = (nx - bw / 2) | 0
+  1099→    const bubY = ny - (npc.type === 'robot' ? 62 : 66) + yOff
+  1100→
+  1101→    // Cloud bubble shape
+  1102→    ctx.fillStyle = 'rgba(8,12,35,0.95)'
+  1103→    roundRect(ctx, bubX, bubY, bw, bh, 6)
+  1104→    ctx.fill()
+  1105→
+  1106→    // Cloud puffs (top)
+  1107→    ctx.beginPath()
+  1108→    ctx.arc(bubX + 10, bubY + 3, 8, 0, Math.PI * 2)
+  1109→    ctx.arc(bubX + bw / 2, bubY - 2, 9, 0, Math.PI * 2)
+  1110→    ctx.arc(bubX + bw - 10, bubY + 3, 8, 0, Math.PI * 2)
+  1111→    ctx.fill()
+  1112→    // Cloud puffs (bottom)
+  1113→    ctx.beginPath()
+  1114→    ctx.arc(bubX + 12, bubY + bh - 3, 6, 0, Math.PI * 2)
+  1115→    ctx.arc(bubX + bw - 12, bubY + bh - 3, 6, 0, Math.PI * 2)
+  1116→    ctx.fill()
+  1117→
+  1118→    // Tail
+  1119→    ctx.beginPath()
+  1120→    ctx.moveTo(nx - 5, bubY + bh - 3)
+  1121→    ctx.lineTo(nx, bubY + bh + 10)
+  1122→    ctx.lineTo(nx + 5, bubY + bh - 3)
+  1123→    ctx.closePath()
+  1124→    ctx.fill()
+  1125→
+  1126→    // Border glow (BRIGHT)
+  1127→    ctx.save()
+  1128→    ctx.shadowColor = npc.color
+  1129→    ctx.shadowBlur = 10
+  1130→    ctx.strokeStyle = npc.color
+  1131→    ctx.lineWidth = 2
+  1132→    roundRect(ctx, bubX, bubY, bw, bh, 6)
+  1133→    ctx.stroke()
+  1134→    ctx.restore()
+  1135→
+  1136→    // Gradient overlay
+  1137→    const bubGrad = ctx.createLinearGradient(bubX, bubY, bubX, bubY + bh)
+  1138→    bubGrad.addColorStop(0, 'rgba(0,229,255,0.1)')
+  1139→    bubGrad.addColorStop(1, 'rgba(108,99,255,0.06)')
+  1140→    ctx.fillStyle = bubGrad
+  1141→    roundRect(ctx, bubX, bubY, bw, bh, 6)
+  1142→    ctx.fill()
+  1143→
+  1144→    // Inner border
+  1145→    ctx.strokeStyle = 'rgba(255,255,255,0.1)'
+  1146→    ctx.lineWidth = 1
+  1147→    roundRect(ctx, bubX + 2, bubY + 2, bw - 4, bh - 4, 4)
+  1148→    ctx.stroke()
+  1149→
+  1150→    // Text with outline (CLEAR, BOLD)
+  1151→    ctx.textAlign = 'center'
+  1152→    ctx.textBaseline = 'middle'
+  1153→    drawStrokedText(ctx, text, nx, bubY + bh / 2 + 1, 3, 'rgba(0,0,0,0.9)', '#FFFFFF')
+  1154→
+  1155→    ctx.globalAlpha = 1
+  1156→  }
+  1157→}
+  1158→
+  1159→/* ═══════════════════ Interactive Object Drawing ═══════════════════ */
+  1160→
+  1161→function drawCrystal(ctx: CanvasRenderingContext2D, crystal: CrystalData, camX: number, camY: number, vw: number, vh: number, time: number) {
+  1162→  if (crystal.collected) return
+  1163→  const cx = (crystal.x - camX) | 0
+  1164→  const cy = (crystal.y - camY) | 0
+  1165→  if (cx < -20 || cx > vw + 20 || cy < -30 || cy > vh + 20) return
+  1166→
+  1167→  const floatY = Math.sin(time * 0.04 + crystal.x * 0.1) * 3
+  1168→  const rgb = hexToRgb(crystal.color)
+  1169→  const pulse = (Math.sin(time * 0.05 + crystal.y * 0.1) + 1) / 2
+  1170→
+  1171→  // Ground glow
+  1172→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.08 + pulse * 0.06).toFixed(3)})`
+  1173→  ctx.beginPath()
+  1174→  ctx.ellipse(cx, cy + 10, 12, 4, 0, 0, Math.PI * 2)
+  1175→  ctx.fill()
+  1176→
+  1177→  // Crystal diamond shape
+  1178→  const yOff = floatY
+  1179→  ctx.fillStyle = crystal.color
+  1180→  ctx.beginPath()
+  1181→  ctx.moveTo(cx, cy - 10 + yOff)
+  1182→  ctx.lineTo(cx + 6, cy + yOff)
+  1183→  ctx.lineTo(cx, cy + 8 + yOff)
+  1184→  ctx.lineTo(cx - 6, cy + yOff)
+  1185→  ctx.closePath()
+  1186→  ctx.fill()
+  1187→
+  1188→  // Crystal highlight
+  1189→  ctx.fillStyle = `rgba(255,255,255,${(0.3 + pulse * 0.2).toFixed(2)})`
+  1190→  ctx.beginPath()
+  1191→  ctx.moveTo(cx - 1, cy - 8 + yOff)
+  1192→  ctx.lineTo(cx + 3, cy - 1 + yOff)
+  1193→  ctx.lineTo(cx, cy + 1 + yOff)
+  1194→  ctx.lineTo(cx - 3, cy - 2 + yOff)
+  1195→  ctx.closePath()
+  1196→  ctx.fill()
+  1197→
+  1198→  // Crystal inner glow
+  1199→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.3 + pulse * 0.3).toFixed(2)})`
+  1200→  ctx.fillRect(cx - 2, cy - 4 + yOff, 4, 6)
+  1201→
+  1202→  // Outer glow ring
+  1203→  ctx.save()
+  1204→  ctx.shadowColor = crystal.color
+  1205→  ctx.shadowBlur = 12 + pulse * 6
+  1206→  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.25 + pulse * 0.2).toFixed(2)})`
+  1207→  ctx.lineWidth = 1
+  1208→  ctx.beginPath()
+  1209→  ctx.arc(cx, cy + yOff, 10, 0, Math.PI * 2)
+  1210→  ctx.stroke()
+  1211→  ctx.restore()
+  1212→
+  1213→  // Sparkle particles
+  1214→  if (time % 20 < 10) {
+  1215→    ctx.fillStyle = `rgba(255,255,255,${(0.5 + pulse * 0.3).toFixed(2)})`
+  1216→    ctx.fillRect(cx + 4, cy - 6 + yOff, 1, 1)
+  1217→    ctx.fillRect(cx - 5, cy + 3 + yOff, 1, 1)
+  1218→  }
+  1219→
+  1220→  // Label
+  1221→  ctx.font = 'bold 6px monospace'
+  1222→  ctx.textAlign = 'center'
+  1223→  ctx.textBaseline = 'bottom'
+  1224→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.6 + pulse * 0.3).toFixed(2)})`
+  1225→  ctx.fillText(crystal.label, cx, cy - 13 + yOff)
+  1226→}
+  1227→
+  1228→function drawBoostPad(ctx: CanvasRenderingContext2D, pad: BoostPadData, camX: number, camY: number, vw: number, vh: number, time: number) {
+  1229→  const px = (pad.x - camX) | 0
+  1230→  const py = (pad.y - camY) | 0
+  1231→  if (px < -24 || px > vw + 24 || py < -24 || py > vh + 24) return
+  1232→
+  1233→  const rgb = hexToRgb(pad.color)
+  1234→  const pulse = (Math.sin(time * 0.06) + 1) / 2
+  1235→
+  1236→  // Ground glow (larger, brighter)
+  1237→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.1 + pulse * 0.08).toFixed(3)})`
+  1238→  ctx.beginPath()
+  1239→  ctx.ellipse(px, py + 2, 22, 10, 0, 0, Math.PI * 2)
+  1240→  ctx.fill()
+  1241→
+  1242→  // Base platform (brighter)
+  1243→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.15)`
+  1244→  ctx.beginPath()
+  1245→  ctx.ellipse(px, py, 18, 9, 0, 0, Math.PI * 2)
+  1246→  ctx.fill()
+  1247→
+  1248→  // Active ring (thicker, brighter)
+  1249→  ctx.save()
+  1250→  ctx.shadowColor = pad.color
+  1251→  ctx.shadowBlur = 12 + pulse * 10
+  1252→  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.6 + pulse * 0.4).toFixed(2)})`
+  1253→  ctx.lineWidth = 3
+  1254→  ctx.beginPath()
+  1255→  ctx.ellipse(px, py, 15, 7, 0, 0, Math.PI * 2)
+  1256→  ctx.stroke()
+  1257→  ctx.restore()
+  1258→
+  1259→  // Inner ring
+  1260→  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.3 + pulse * 0.2).toFixed(2)})`
+  1261→  ctx.lineWidth = 1.5
+  1262→  ctx.beginPath()
+  1263→  ctx.ellipse(px, py, 8, 4, 0, 0, Math.PI * 2)
+  1264→  ctx.stroke()
+  1265→
+  1266→  // Center dot
+  1267→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.5 + pulse * 0.4).toFixed(2)})`
+  1268→  ctx.beginPath()
+  1269→  ctx.arc(px, py, 2, 0, Math.PI * 2)
+  1270→  ctx.fill()
+  1271→
+  1272→  // Arrow up indicator (bigger)
+  1273→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.7 + pulse * 0.3).toFixed(2)})`
+  1274→  ctx.beginPath()
+  1275→  ctx.moveTo(px, py - 8 - pulse * 4)
+  1276→  ctx.lineTo(px + 4, py - 2 - pulse * 4)
+  1277→  ctx.lineTo(px - 4, py - 2 - pulse * 4)
+  1278→  ctx.closePath()
+  1279→  ctx.fill()
+  1280→
+  1281→  // Speed lines (brighter)
+  1282→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.3 + pulse * 0.2).toFixed(2)})`
+  1283→  ctx.fillRect(px - 10, py - 3 - pulse * 3, 5, 1.5)
+  1284→  ctx.fillRect(px + 6, py - 3 - pulse * 3, 5, 1.5)
+  1285→
+  1286→  // Label
+  1287→  ctx.font = 'bold 6px monospace'
+  1288→  ctx.textAlign = 'center'
+  1289→  ctx.textBaseline = 'bottom'
+  1290→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.6 + pulse * 0.3).toFixed(2)})`
+  1291→  ctx.fillText('BOOST', px, py - 12 - pulse * 4)
+  1292→}
+  1293→
+  1294→function drawTeleporter(ctx: CanvasRenderingContext2D, tp: TeleporterData, camX: number, camY: number, vw: number, vh: number, time: number, isCoolingDown: boolean) {
+  1295→  const tx = (tp.x - camX) | 0
+  1296→  const ty = (tp.y - camY) | 0
+  1297→  if (tx < -30 || tx > vw + 30 || ty < -40 || ty > vh + 24) return
+  1298→
+  1299→  const rgb = hexToRgb(tp.color)
+  1300→  const pulse = (Math.sin(time * 0.04 + tp.x * 0.1) + 1) / 2
+  1301→  const alpha = isCoolingDown ? 0.3 : (0.5 + pulse * 0.4)
+  1302→
+  1303→  // Ground glow (large, prominent)
+  1304→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${isCoolingDown ? 0.03 : (0.08 + pulse * 0.06).toFixed(3)})`
+  1305→  ctx.beginPath()
+  1306→  ctx.ellipse(tx, ty + 6, 28, 12, 0, 0, Math.PI * 2)
+  1307→  ctx.fill()
+  1308→
+  1309→  // Portal base (brighter)
+  1310→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.12)`
+  1311→  ctx.beginPath()
+  1312→  ctx.ellipse(tx, ty + 4, 20, 10, 0, 0, Math.PI * 2)
+  1313→  ctx.fill()
+  1314→
+  1315→  // Outer ring (thicker, brighter)
+  1316→  ctx.save()
+  1317→  ctx.shadowColor = tp.color
+  1318→  ctx.shadowBlur = isCoolingDown ? 6 : 16 + pulse * 12
+  1319→  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha.toFixed(2)})`
+  1320→  ctx.lineWidth = 3
+  1321→  ctx.beginPath()
+  1322→  ctx.ellipse(tx, ty + 2, 18, 10, 0, 0, Math.PI * 2)
+  1323→  ctx.stroke()
+  1324→  ctx.restore()
+  1325→
+  1326→  // Inner vortex (faster spin)
+  1327→  if (!isCoolingDown) {
+  1328→    const spinAngle = time * 0.1
+  1329→    ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.2 + pulse * 0.15).toFixed(2)})`
+  1330→    ctx.beginPath()
+  1331→    ctx.ellipse(tx, ty + 2, 12, 6, spinAngle, 0, Math.PI * 2)
+  1332→    ctx.fill()
+  1333→    ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.12 + pulse * 0.08).toFixed(2)})`
+  1334→    ctx.beginPath()
+  1335→    ctx.ellipse(tx, ty + 2, 6, 3, -spinAngle, 0, Math.PI * 2)
+  1336→    ctx.fill()
+  1337→    // Center bright dot
+  1338→    ctx.fillStyle = `rgba(255,255,255,${(0.3 + pulse * 0.3).toFixed(2)})`
+  1339→    ctx.beginPath()
+  1340→    ctx.arc(tx, ty + 2, 2, 0, Math.PI * 2)
+  1341→    ctx.fill()
+  1342→  }
+  1343→
+  1344→  // Vertical beam (taller, brighter)
+  1345→  if (!isCoolingDown) {
+  1346→    const beamGrad = ctx.createLinearGradient(tx, ty - 40, tx, ty + 4)
+  1347→    beamGrad.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},0)`)
+  1348→    beamGrad.addColorStop(0.3, `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.04 + pulse * 0.03).toFixed(3)})`)
+  1349→    beamGrad.addColorStop(0.7, `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.12 + pulse * 0.08).toFixed(3)})`)
+  1350→    beamGrad.addColorStop(1, `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.2 + pulse * 0.1).toFixed(3)})`)
+  1351→    ctx.fillStyle = beamGrad
+  1352→    ctx.fillRect(tx - 5, ty - 40, 10, 44)
+  1353→    // Beam particles
+  1354→    if (time % 4 < 2) {
+  1355→      ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.4 + pulse * 0.3).toFixed(2)})`
+  1356→      const beamParticleY = ty - 30 + (time % 30)
+  1357→      ctx.fillRect(tx - 1, beamParticleY, 2, 2)
+  1358→      ctx.fillRect(tx + 2, beamParticleY - 10, 1, 1)
+  1359→    }
+  1360→  }
+  1361→
+  1362→  // Label (more prominent)
+  1363→  ctx.font = 'bold 7px monospace'
+  1364→  ctx.textAlign = 'center'
+  1365→  ctx.textBaseline = 'bottom'
+  1366→  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${(0.7 + pulse * 0.3).toFixed(2)})`
+  1367→  ctx.fillText(isCoolingDown ? 'COOLDOWN' : 'WARP', tx, ty - 16)
+  1368→  // Direction hint
+  1369→  if (!isCoolingDown) {
+  1370→    ctx.font = 'bold 5px monospace'
+  1371→    ctx.fillStyle = `rgba(255,255,255,${(0.3 + pulse * 0.2).toFixed(2)})`
+  1372→    const targetLabel = tp.id === 'tp1' ? '→ S.EAST' : '→ N.WEST'
+  1373→    ctx.fillText(targetLabel, tx, ty - 8)
+  1374→  }
+  1375→}
+  1376→
+  1377→function drawScoreUI(ctx: CanvasRenderingContext2D, vw: number, vh: number, score: number, totalCrystals: number, hasSpeedBoost: boolean, time: number) {
+  1378→  const uiX = 12
+  1379→  const uiY = vh - 40
+  1380→
+  1381→  // Background
+  1382→  ctx.fillStyle = 'rgba(0,0,0,0.65)'
+  1383→  roundRect(ctx, uiX - 4, uiY - 4, 130, 32, 5)
+  1384→  ctx.fill()
+  1385→  ctx.strokeStyle = 'rgba(0,229,255,0.3)'
+  1386→  ctx.lineWidth = 1
+  1387→  roundRect(ctx, uiX - 4, uiY - 4, 130, 32, 5)
+  1388→  ctx.stroke()
+  1389→
+  1390→  // Crystal icon
+  1391→  ctx.fillStyle = '#00E5FF'
+  1392→  ctx.beginPath()
+  1393→  ctx.moveTo(uiX + 8, uiY + 2)
+  1394→  ctx.lineTo(uiX + 14, uiY + 10)
+  1395→  ctx.lineTo(uiX + 8, uiY + 18)
+  1396→  ctx.lineTo(uiX + 2, uiY + 10)
+  1397→  ctx.closePath()
+  1398→  ctx.fill()
+  1399→  ctx.fillStyle = 'rgba(255,255,255,0.3)'
+  1400→  ctx.beginPath()
+  1401→  ctx.moveTo(uiX + 7, uiY + 4)
+  1402→  ctx.lineTo(uiX + 11, uiY + 9)
+  1403→  ctx.lineTo(uiX + 8, uiY + 12)
+  1404→  ctx.lineTo(uiX + 5, uiY + 8)
+  1405→  ctx.closePath()
+  1406→  ctx.fill()
+  1407→
+  1408→  // Score text
+  1409→  ctx.font = 'bold 10px monospace'
+  1410→  ctx.textAlign = 'left'
+  1411→  ctx.textBaseline = 'middle'
+  1412→  ctx.fillStyle = '#FFFFFF'
+  1413→  ctx.fillText(`${score}/${totalCrystals}`, uiX + 22, uiY + 11)
+  1414→
+  1415→  // Speed boost indicator
+  1416→  if (hasSpeedBoost) {
+  1417→    const boostPulse = (Math.sin(time * 0.1) + 1) / 2
+  1418→    ctx.fillStyle = `rgba(0,229,255,${(0.5 + boostPulse * 0.5).toFixed(2)})`
+  1419→    ctx.font = 'bold 8px monospace'
+  1420→    ctx.fillText('⚡ BOOST', uiX + 70, uiY + 11)
+  1421→  }
+  1422→
+  1423→  // All collected message
+  1424→  if (score >= totalCrystals) {
+  1425→    const glow = (Math.sin(time * 0.05) + 1) / 2
+  1426→    ctx.font = 'bold 8px monospace'
+  1427→    ctx.textAlign = 'left'
+  1428→    ctx.fillStyle = `rgba(105,240,174,${(0.7 + glow * 0.3).toFixed(2)})`
+  1429→    ctx.fillText('ALL FOUND!', uiX + 70, uiY + 11)
+  1430→  }
+  1431→}
+  1432→
+  1433→/* ═══════════════════ Character Drawing ═══════════════════ */
+  1434→
+  1435→function drawCharacter(
+  1436→  ctx: CanvasRenderingContext2D,
+  1437→  screenX: number,
+  1438→  screenY: number,
+  1439→  dir: string,
+  1440→  walkCycle: number,
+  1441→  isMoving: boolean,
+  1442→  idleBob: number,
+  1443→  time: number
+  1444→) {
+  1445→  const idleBobY = isMoving ? 0 : Math.sin(idleBob * 0.06) * 1.5
+  1446→  // Smooth walk bob - slight vertical oscillation
+  1447→  const walkBobY = isMoving ? Math.abs(Math.sin(walkCycle)) * -1.5 : 0
+  1448→  const totalBob = idleBobY + walkBobY
+  1449→
+  1450→  ctx.save()
+  1451→  ctx.translate((screenX) | 0, (screenY + totalBob) | 0)
+  1452→
+  1453→  // Shadow (stretches slightly when walking)
+  1454→  ctx.fillStyle = 'rgba(0,0,0,0.25)'
+  1455→  ctx.beginPath()
+  1456→  const shadowScale = isMoving ? 1.1 : 1
+  1457→  ctx.ellipse(10, 28, 10 * shadowScale, 3, 0, 0, Math.PI * 2)
+  1458→  ctx.fill()
+  1459→
+  1460→  // Walk phase (0 to 2PI cycle)
+  1461→  const phase = walkCycle
+  1462→  const legSwing = isMoving ? Math.sin(phase) * 4 : 0  // How far forward/back each leg goes
+  1463→  const armSwingSmooth = isMoving ? Math.sin(phase) * 3 : 0  // Smooth arm swing
+  1464→  const bodyTilt = isMoving ? Math.sin(phase) * 0.3 : 0  // Very subtle body tilt
+  1465→
+  1466→  // ── Back arm (behind body) ──
+  1467→  const backArmX = dir === 'left' ? 18 : -2
+  1468→  ctx.fillStyle = '#00838F'
+  1469→  const backArmSwing = -armSwingSmooth
+  1470→  ctx.fillRect(backArmX, 12 + backArmSwing, 4, 9)
+  1471→  // Back hand
+  1472→  ctx.fillStyle = '#FFCC80'
+  1473→  ctx.fillRect(backArmX, 20 + backArmSwing, 4, 3)
+  1474→
+  1475→  // ── Back leg ──
+  1476→  const backLegSwing = -legSwing
+  1477→  ctx.fillStyle = '#004D40'
+  1478→  // Upper leg
+  1479→  ctx.fillRect(11 + backLegSwing * 0.3, 19, 5, 6)
+  1480→  // Lower leg (bends at knee)
+  1481→  ctx.fillRect(11 + backLegSwing * 0.6, 24, 5, 6)
+  1482→  // Back shoe
+  1483→  ctx.fillStyle = '#00251a'
+  1484→  const backShoeX = 11 + backLegSwing * 0.6
+  1485→  ctx.fillRect(backShoeX - 1, 29, 6, 2)
+  1486→
+  1487→  // ── Body ──
+  1488→  ctx.fillStyle = '#00E5FF'
+  1489→  ctx.fillRect(2, 10, 16, 10)
+  1490→  // Body stripe (horizontal accent)
+  1491→  ctx.fillStyle = '#00BCD4'
+  1492→  ctx.fillRect(2, 14, 16, 2)
+  1493→  // Body top highlight
+  1494→  ctx.fillStyle = 'rgba(255,255,255,0.12)'
+  1495→  ctx.fillRect(2, 10, 16, 1)
+  1496→  // Chest pocket
+  1497→  ctx.fillStyle = '#00838F'
+  1498→  ctx.fillRect(5, 11, 5, 3)
+  1499→  ctx.fillStyle = '#006064'
+  1500→  ctx.fillRect(5, 13, 5, 1)
+  1501→  // Belt
+  1502→  ctx.fillStyle = '#004D40'
+  1503→  ctx.fillRect(2, 18, 16, 2)
+  1504→  // Belt buckle
+  1505→  ctx.fillStyle = '#FFD740'
+  1506→  ctx.fillRect(8, 18, 4, 2)
+  1507→  // Collar
+  1508→  ctx.fillStyle = '#006064'
+  1509→  ctx.fillRect(5, 10, 10, 1)
+  1510→
+  1511→  // ── Front leg ──
+  1512→  const frontLegSwing = legSwing
+  1513→  ctx.fillStyle = '#006064'
+  1514→  // Upper leg
+  1515→  ctx.fillRect(4 + frontLegSwing * 0.3, 19, 5, 6)
+  1516→  // Lower leg
+  1517→  ctx.fillRect(4 + frontLegSwing * 0.6, 24, 5, 6)
+  1518→  // Front shoe
+  1519→  ctx.fillStyle = '#004D40'
+  1520→  const frontShoeX = 4 + frontLegSwing * 0.6
+  1521→  ctx.fillRect(frontShoeX - 1, 29, 6, 2)
+  1522→  // Shoe sole
+  1523→  ctx.fillStyle = '#00251a'
+  1524→  ctx.fillRect(frontShoeX - 1, 30, 6, 1)
+  1525→
+  1526→  // ── Front arm (in front of body) ──
+  1527→  const frontArmX = dir === 'left' ? -2 : 18
+  1528→  ctx.fillStyle = '#00BCD4'
+  1529→  ctx.fillRect(frontArmX, 12 + armSwingSmooth, 4, 9)
+  1530→  // Front hand
+  1531→  ctx.fillStyle = '#FFE0B2'
+  1532→  ctx.fillRect(frontArmX, 20 + armSwingSmooth, 4, 3)
+  1533→
+  1534→  // ── Head ──
+  1535→  // Slight head bob in walk direction
+  1536→  const headOffX = isMoving ? Math.sin(phase + 0.5) * 0.5 : 0
+  1537→  ctx.fillStyle = '#FFE0B2'
+  1538→  ctx.fillRect(3 + headOffX, 0, 14, 10)
+  1539→
+  1540→  // Hair
+  1541→  ctx.fillStyle = '#4E342E'
+  1542→  ctx.fillRect(3 + headOffX, -1, 14, 5)
+  1543→  if (dir === 'left') ctx.fillRect(3 + headOffX, -1, 3, 7)
+  1544→  else if (dir === 'right') ctx.fillRect(14 + headOffX, -1, 3, 7)
+  1545→  else { ctx.fillRect(3 + headOffX, -1, 3, 6); ctx.fillRect(14 + headOffX, -1, 3, 6) }
+  1546→
+  1547→  // Eyes
+  1548→  ctx.fillStyle = '#212121'
+  1549→  if (dir === 'down') {
+  1550→    ctx.fillRect(6 + headOffX, 5, 3, 3)
+  1551→    ctx.fillRect(11 + headOffX, 5, 3, 3)
+  1552→    ctx.fillStyle = '#FFFFFF'
+  1553→    ctx.fillRect(7 + headOffX, 5, 1, 1)
+  1554→    ctx.fillRect(12 + headOffX, 5, 1, 1)
+  1555→    ctx.fillStyle = '#E57373'
+  1556→    ctx.fillRect(8 + headOffX, 8, 4, 1)
+  1557→  } else if (dir === 'up') {
+  1558→    ctx.fillStyle = '#4E342E'
+  1559→    ctx.fillRect(3 + headOffX, 2, 14, 3)
+  1560→  } else if (dir === 'left') {
+  1561→    ctx.fillRect(5 + headOffX, 5, 3, 3)
+  1562→    ctx.fillRect(9 + headOffX, 5, 3, 3)
+  1563→    ctx.fillStyle = '#FFFFFF'
+  1564→    ctx.fillRect(5 + headOffX, 5, 1, 1)
+  1565→    ctx.fillRect(9 + headOffX, 5, 1, 1)
+  1566→    ctx.fillStyle = '#E57373'
+  1567→    ctx.fillRect(6 + headOffX, 8, 3, 1)
+  1568→  } else {
+  1569→    ctx.fillRect(8 + headOffX, 5, 3, 3)
+  1570→    ctx.fillRect(12 + headOffX, 5, 3, 3)
+  1571→    ctx.fillStyle = '#FFFFFF'
+  1572→    ctx.fillRect(8 + headOffX, 5, 1, 1)
+  1573→    ctx.fillRect(12 + headOffX, 5, 1, 1)
+  1574→    ctx.fillStyle = '#E57373'
+  1575→    ctx.fillRect(11 + headOffX, 8, 3, 1)
+  1576→  }
+  1577→
+  1578→  ctx.restore()
+  1579→}
+  1580→
+  1581→/* ═══════════════════ UI Drawing ═══════════════════ */
+  1582→
+  1583→function drawMinimap(ctx: CanvasRenderingContext2D, vw: number, vh: number, charX: number, charY: number, camX: number, camY: number, time: number) {
+  1584→  const mw = 120
+  1585→  const mh = 90
+  1586→  const mx = vw - mw - 12
+  1587→  const my = 12
+  1588→  const sx = mw / WORLD_W
+  1589→  const sy = mh / WORLD_H
+  1590→
+  1591→  // Background
+  1592→  ctx.fillStyle = 'rgba(0,0,0,0.65)'
+  1593→  roundRect(ctx, mx - 3, my - 3, mw + 6, mh + 6, 4)
+  1594→  ctx.fill()
+  1595→  ctx.fillStyle = 'rgba(13,18,51,0.92)'
+  1596→  ctx.fillRect(mx, my, mw, mh)
+  1597→
+  1598→  // Grid lines
+  1599→  ctx.strokeStyle = 'rgba(0,229,255,0.06)'
+  1600→  ctx.lineWidth = 0.3
+  1601→  for (let gx = mx; gx < mx + mw; gx += 12) {
+  1602→    ctx.beginPath(); ctx.moveTo(gx, my); ctx.lineTo(gx, my + mh); ctx.stroke()
+  1603→  }
+  1604→  for (let gy = my; gy < my + mh; gy += 12) {
+  1605→    ctx.beginPath(); ctx.moveTo(mx, gy); ctx.lineTo(mx + mw, gy); ctx.stroke()
+  1606→  }
+  1607→
+  1608→  // Paths
+  1609→  ctx.fillStyle = 'rgba(44,44,84,0.7)'
+  1610→  for (const p of PATHS) {
+  1611→    ctx.fillRect(mx + p.x * sx, my + p.y * sy, Math.max(p.w * sx, 1), Math.max(p.h * sy, 1))
+  1612→  }
+  1613→
+  1614→  // Buildings
+  1615→  for (const b of BUILDINGS) {
+  1616→    ctx.fillStyle = b.glowColor
+  1617→    ctx.fillRect(mx + b.x * sx, my + b.y * sy, Math.max(b.w * sx, 4), Math.max(b.h * sy, 3))
+  1618→  }
+  1619→
+  1620→  // Crystals on minimap
+  1621→  for (const crystal of CRYSTALS) {
+  1622→    if (crystal.collected) continue
+  1623→    const cPulse = (Math.sin(time * 0.05) + 1) / 2
+  1624→    ctx.fillStyle = `rgba(${hexToRgb(crystal.color).r},${hexToRgb(crystal.color).g},${hexToRgb(crystal.color).b},${(0.5 + cPulse * 0.5).toFixed(2)})`
+  1625→    ctx.fillRect(mx + crystal.x * sx - 1, my + crystal.y * sy - 1, 3, 3)
+  1626→  }
+  1627→
+  1628→  // Teleporters on minimap
+  1629→  for (const tp of TELEPORTERS) {
+  1630→    ctx.fillStyle = tp.color
+  1631→    ctx.fillRect(mx + tp.x * sx - 1, my + tp.y * sy - 1, 4, 4)
+  1632→  }
+  1633→
+  1634→  // Viewport rect
+  1635→  ctx.strokeStyle = 'rgba(255,255,255,0.3)'
+  1636→  ctx.lineWidth = 0.5
+  1637→  ctx.strokeRect(mx + camX * sx, my + camY * sy, vw * sx, vh * sy)
+  1638→
+  1639→  // Character dot with glow
+  1640→  ctx.fillStyle = 'rgba(0,229,255,0.35)'
+  1641→  ctx.fillRect(mx + charX * sx - 2, my + charY * sy - 2, 6, 6)
+  1642→  ctx.fillStyle = '#00E5FF'
+  1643→  ctx.fillRect(mx + charX * sx - 1, my + charY * sy - 1, 4, 4)
+  1644→
+  1645→  // Border
+  1646→  ctx.strokeStyle = 'rgba(0,229,255,0.3)'
+  1647→  ctx.lineWidth = 1
+  1648→  roundRect(ctx, mx - 3, my - 3, mw + 6, mh + 6, 4)
+  1649→  ctx.stroke()
+  1650→
+  1651→  // Label
+  1652→  ctx.fillStyle = 'rgba(0,229,255,0.5)'
+  1653→  ctx.font = '5px monospace'
+  1654→  ctx.textAlign = 'left'
+  1655→  ctx.textBaseline = 'top'
+  1656→  ctx.fillText('MAP', mx + 3, my + 3)
+  1657→}
+  1658→
+  1659→function drawPrompt(ctx: CanvasRenderingContext2D, building: BuildingData | null, camX: number, camY: number, isMobile: boolean, time: number) {
+  1660→  if (!building) return
+  1661→
+  1662→  const bx = (building.x + building.w / 2 - camX) | 0
+  1663→  const by = (building.y + building.h + 20 - camY) | 0
+  1664→  const text = isMobile ? 'Tap [E] to enter' : 'Press E to enter'
+  1665→
+  1666→  ctx.font = 'bold 8px monospace'
+  1667→  const tw = ctx.measureText(text).width
+  1668→  const pw = tw + 18
+  1669→  const ph = 18
+  1670→
+  1671→  const alpha = 0.7 + Math.sin(time * 0.006) * 0.3
+  1672→  ctx.globalAlpha = alpha
+  1673→
+  1674→  // Background pill
+  1675→  ctx.fillStyle = 'rgba(0,0,0,0.82)'
+  1676→  roundRect(ctx, bx - pw / 2, by, pw, ph, 5)
+  1677→  ctx.fill()
+  1678→
+  1679→  // Border with glow
+  1680→  ctx.save()
+  1681→  ctx.shadowColor = building.glowColor
+  1682→  ctx.shadowBlur = 6
+  1683→  ctx.strokeStyle = building.glowColor
+  1684→  ctx.lineWidth = 1.5
+  1685→  roundRect(ctx, bx - pw / 2, by, pw, ph, 5)
+  1686→  ctx.stroke()
+  1687→  ctx.restore()
+  1688→
+  1689→  // Gradient fill
+  1690→  const pGrad = ctx.createLinearGradient(bx - pw / 2, by, bx - pw / 2, by + ph)
+  1691→  pGrad.addColorStop(0, 'rgba(0,229,255,0.1)')
+  1692→  pGrad.addColorStop(1, 'rgba(108,99,255,0.06)')
+  1693→  ctx.fillStyle = pGrad
+  1694→  roundRect(ctx, bx - pw / 2, by, pw, ph, 5)
+  1695→  ctx.fill()
+  1696→
+  1697→  // Text
+  1698→  ctx.textAlign = 'center'
+  1699→  ctx.textBaseline = 'middle'
+  1700→  drawStrokedText(ctx, text, bx, by + ph / 2, 2, 'rgba(0,0,0,0.85)', building.glowColor)
+  1701→
+  1702→  ctx.globalAlpha = 1
+  1703→}
+  1704→
+  1705→/* ═══════════════════ Component ═══════════════════ */
+  1706→
+  1707→export default function PixelWorld({ onBuildingClick }: PixelWorldProps) {
+  1708→  const canvasRef = useRef<HTMLCanvasElement>(null)
+  1709→  const containerRef = useRef<HTMLDivElement>(null)
+  1710→  const offscreenRef = useRef<HTMLCanvasElement | null>(null)
+  1711→  const animRef = useRef(0)
+  1712→  const timeRef = useRef(0)
+  1713→
+  1714→  const stateRef = useRef({
+  1715→    charX: WORLD_W / 2 - 10,
+  1716→    charY: WORLD_H / 2 - 14,
+  1717→    dir: 'down' as 'left' | 'right' | 'up' | 'down',
+  1718→    walkCycle: 0,
+  1719→    isMoving: false,
+  1720→    camX: 0,
+  1721→    camY: 0,
+  1722→    nearBuilding: null as string | null,
+  1723→    idleBob: 0,
+  1724→    targetX: -1,
+  1725→    targetY: -1,
+  1726→    score: 0,
+  1727→    speedBoost: 0,
+  1728→    teleportCooldown: 0,
+  1729→  })
+  1730→
+  1731→  const keysRef = useRef(new Set<string>())
+  1732→  const joystickRef = useRef({ active: false, dx: 0, dy: 0 })
+  1733→  const thumbRef = useRef<HTMLDivElement>(null)
+  1734→  const particlesRef = useRef<Particle[]>([])
+  1735→
+  1736→  const [isMobile, setIsMobile] = useState(false)
+  1737→  const [nearBuilding, setNearBuilding] = useState<string | null>(null)
+  1738→  const [showHelp, setShowHelp] = useState(true)
+  1739→
+  1740→  useEffect(() => {
+  1741→    const check = () => setIsMobile('ontouchstart' in window || navigator.maxTouchPoints > 0)
+  1742→    check()
+  1743→    const onResize = () => check()
+  1744→    window.addEventListener('resize', onResize)
+  1745→    return () => window.removeEventListener('resize', onResize)
+  1746→  }, [])
+  1747→
+  1748→  useEffect(() => {
+  1749→    const t = setTimeout(() => setShowHelp(false), 6000)
+  1750→    return () => clearTimeout(t)
+  1751→  }, [])
+  1752→
+  1753→  const findNearBuilding = useCallback((cx: number, cy: number): BuildingData | null => {
+  1754→    let nearest: BuildingData | null = null
+  1755→    let minDist = INTERACT_DIST
+  1756→    for (const b of BUILDINGS) {
+  1757→      const d = Math.hypot(cx - (b.x + b.w / 2), cy - (b.y + b.h / 2))
+  1758→      if (d < minDist) { minDist = d; nearest = b }
+  1759→    }
+  1760→    return nearest
+  1761→  }, [])
+  1762→
+  1763→  const interact = useCallback(() => {
+  1764→    const s = stateRef.current
+  1765→    const b = findNearBuilding(s.charX + 10, s.charY + 14)
+  1766→    if (b) onBuildingClick(b.id)
+  1767→  }, [onBuildingClick, findNearBuilding])
+  1768→
+  1769→  useEffect(() => {
+  1770→    const onDown = (e: KeyboardEvent) => {
+  1771→      const k = e.key.toLowerCase()
+  1772→      keysRef.current.add(k)
+  1773→      if (k === 'e' || k === 'enter') interact()
+  1774→    }
+  1775→    const onUp = (e: KeyboardEvent) => keysRef.current.delete(e.key.toLowerCase())
+  1776→    window.addEventListener('keydown', onDown)
+  1777→    window.addEventListener('keyup', onUp)
+  1778→    return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp) }
+  1779→  }, [interact])
+  1780→
+  1781→  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  1782→    const canvas = canvasRef.current
+  1783→    if (!canvas) return
+  1784→    const rect = canvas.getBoundingClientRect()
+  1785→    const s = stateRef.current
+  1786→    const offscreen = offscreenRef.current
+  1787→    if (!offscreen) return
+  1788→    const scaleX = offscreen.width / rect.width
+  1789→    const scaleY = offscreen.height / rect.height
+  1790→    s.targetX = (e.clientX - rect.left) * scaleX + s.camX
+  1791→    s.targetY = (e.clientY - rect.top) * scaleY + s.camY
+  1792→  }, [])
+  1793→
+  1794→  const handleCanvasTouch = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+  1795→    const canvas = canvasRef.current
+  1796→    if (!canvas) return
+  1797→    const rect = canvas.getBoundingClientRect()
+  1798→    const touch = e.changedTouches[0]
+  1799→    if (touch.clientY > rect.bottom - 130) return
+  1800→    const s = stateRef.current
+  1801→    const offscreen = offscreenRef.current
+  1802→    if (!offscreen) return
+  1803→    const scaleX = offscreen.width / rect.width
+  1804→    const scaleY = offscreen.height / rect.height
+  1805→    s.targetX = (touch.clientX - rect.left) * scaleX + s.camX
+  1806→    s.targetY = (touch.clientY - rect.top) * scaleY + s.camY
+  1807→  }, [])
+  1808→
+  1809→  const handleJoyStart = useCallback((e: React.TouchEvent) => {
+  1810→    e.preventDefault(); e.stopPropagation()
+  1811→    joystickRef.current.active = true
+  1812→    joystickRef.current.dx = 0; joystickRef.current.dy = 0
+  1813→    stateRef.current.targetX = -1; stateRef.current.targetY = -1
+  1814→    if (thumbRef.current) thumbRef.current.style.transform = 'translate(0px, 0px)'
+  1815→  }, [])
+  1816→
+  1817→  const handleJoyMove = useCallback((e: React.TouchEvent) => {
+  1818→    e.preventDefault(); e.stopPropagation()
+  1819→    if (!joystickRef.current.active) return
+  1820→    const touch = e.touches[0]
+  1821→    const base = document.getElementById('joystick-base')
+  1822→    if (!base) return
+  1823→    const rect = base.getBoundingClientRect()
+  1824→    const cx = rect.left + rect.width / 2
+  1825→    const cy = rect.top + rect.height / 2
+  1826→    let dx = touch.clientX - cx
+  1827→    let dy = touch.clientY - cy
+  1828→    const maxR = rect.width / 2 - 20
+  1829→    const dist = Math.hypot(dx, dy)
+  1830→    if (dist > maxR) { dx = dx / dist * maxR; dy = dy / dist * maxR }
+  1831→    joystickRef.current.dx = dx / maxR
+  1832→    joystickRef.current.dy = dy / maxR
+  1833→    if (thumbRef.current) thumbRef.current.style.transform = `translate(${dx}px, ${dy}px)`
+  1834→  }, [])
+  1835→
+  1836→  const handleJoyEnd = useCallback((e: React.TouchEvent) => {
+  1837→    e.preventDefault()
+  1838→    joystickRef.current.active = false
+  1839→    joystickRef.current.dx = 0; joystickRef.current.dy = 0
+  1840→    if (thumbRef.current) thumbRef.current.style.transform = 'translate(0px, 0px)'
+  1841→  }, [])
+  1842→
+  1843→  // ── Main Game Loop Effect ──
+  1844→  useEffect(() => {
+  1845→    const offscreen = document.createElement('canvas')
+  1846→    offscreenRef.current = offscreen
+  1847→
+  1848→    const resize = () => {
+  1849→      const canvas = canvasRef.current
+  1850→      const container = containerRef.current
+  1851→      if (!canvas || !container) return
+  1852→      const cw = container.clientWidth
+  1853→      const ch = container.clientHeight
+  1854→      canvas.width = cw
+  1855→      canvas.height = ch
+  1856→      offscreen.width = Math.ceil(cw / PIXEL_SCALE)
+  1857→      offscreen.height = Math.ceil(ch / PIXEL_SCALE)
+  1858→    }
+  1859→    resize()
+  1860→    window.addEventListener('resize', resize)
+  1861→
+  1862→    const loop = () => {
+  1863→      const canvas = canvasRef.current
+  1864→      const ctx = canvas?.getContext('2d')
+  1865→      const offCtx = offscreen?.getContext('2d')
+  1866→      if (!canvas || !ctx || !offCtx) { animRef.current = requestAnimationFrame(loop); return }
+  1867→
+  1868→      const s = stateRef.current
+  1869→      const keys = keysRef.current
+  1870→      const joy = joystickRef.current
+  1871→      timeRef.current++
+  1872→      const time = timeRef.current
+  1873→      const vw = offscreen.width
+  1874→      const vh = offscreen.height
+  1875→
+  1876→      // ── Input Processing ──
+  1877→      let dx = 0, dy = 0
+  1878→      if (keys.has('arrowleft') || keys.has('a')) dx -= 1
+  1879→      if (keys.has('arrowright') || keys.has('d')) dx += 1
+  1880→      if (keys.has('arrowup') || keys.has('w')) dy -= 1
+  1881→      if (keys.has('arrowdown') || keys.has('s')) dy += 1
+  1882→
+  1883→      if (joy.active && (Math.abs(joy.dx) > 0.15 || Math.abs(joy.dy) > 0.15)) {
+  1884→        dx += joy.dx
+  1885→        dy += joy.dy
+  1886→      }
+  1887→
+  1888→      if (s.targetX >= 0 && s.targetY >= 0 && !joy.active && dx === 0 && dy === 0) {
+  1889→        const tdx = s.targetX - (s.charX + 10)
+  1890→        const tdy = s.targetY - (s.charY + 14)
+  1891→        const tdist = Math.hypot(tdx, tdy)
+  1892→        if (tdist > CHAR_SPEED + 1) {
+  1893→          dx += tdx / tdist
+  1894→          dy += tdy / tdist
+  1895→        } else {
+  1896→          s.targetX = -1; s.targetY = -1
+  1897→        }
+  1898→      } else if (dx !== 0 || dy !== 0) {
+  1899→        s.targetX = -1; s.targetY = -1
+  1900→      }
+  1901→
+  1902→      const len = Math.hypot(dx, dy)
+  1903→      if (len > 0.01) {
+  1904→        const speed = s.speedBoost > 0 ? CHAR_SPEED * 1.8 : CHAR_SPEED
+  1905→        dx = dx / len * speed
+  1906→        dy = dy / len * speed
+  1907→        s.isMoving = true
+  1908→
+  1909→        if (Math.abs(dx) > Math.abs(dy)) s.dir = dx > 0 ? 'right' : 'left'
+  1910→        else s.dir = dy > 0 ? 'down' : 'up'
+  1911→
+  1912→        s.walkCycle += 0.18  // Smooth continuous walk cycle
+  1913→
+  1914→        if (time % 8 === 0) {
+  1915→          particlesRef.current.push({
+  1916→            x: s.charX + 10 + (Math.random() - 0.5) * 8,
+  1917→            y: s.charY + 28,
+  1918→            vx: (Math.random() - 0.5) * 0.5,
+  1919→            vy: -Math.random() * 0.4 - 0.1,
+  1920→            life: 22, maxLife: 22,
+  1921→            color: s.speedBoost > 0 ? '#00E5FF' : '#4a4a6a', size: 2,
+  1922→          })
+  1923→        }
+  1924→      } else {
+  1925→        s.isMoving = false
+  1926→        // Gradually slow down walk cycle
+  1927→        if (s.walkCycle % (Math.PI * 2) > 0.1) s.walkCycle += 0.05
+  1928→        s.idleBob++
+  1929→      }
+  1930→
+  1931→      // Decrease speed boost
+  1932→      if (s.speedBoost > 0) s.speedBoost--
+  1933→      // Decrease teleport cooldown
+  1934→      if (s.teleportCooldown > 0) s.teleportCooldown--
+  1935→
+  1936→      s.charX = Math.max(0, Math.min(WORLD_W - 20, s.charX + dx))
+  1937→      s.charY = Math.max(0, Math.min(WORLD_H - 31, s.charY + dy))
+  1938→
+  1939→      // ── Crystal collection ──
+  1940→      const charCX = s.charX + 10
+  1941→      const charCY = s.charY + 14
+  1942→      for (const crystal of CRYSTALS) {
+  1943→        if (crystal.collected) continue
+  1944→        const dist = Math.hypot(charCX - crystal.x, charCY - crystal.y)
+  1945→        if (dist < 20) {
+  1946→          crystal.collected = true
+  1947→          s.score++
+  1948→          // Burst particles on collection
+  1949→          for (let i = 0; i < 12; i++) {
+  1950→            const angle = (i / 12) * Math.PI * 2
+  1951→            particlesRef.current.push({
+  1952→              x: crystal.x,
+  1953→              y: crystal.y,
+  1954→              vx: Math.cos(angle) * 1.5,
+  1955→              vy: Math.sin(angle) * 1.5,
+  1956→              life: 30, maxLife: 30,
+  1957→              color: crystal.color, size: 3,
+  1958→            })
+  1959→          }
+  1960→        }
+  1961→      }
+  1962→
+  1963→      // ── Boost pad activation ──
+  1964→      for (const pad of BOOST_PADS) {
+  1965→        const dist = Math.hypot(charCX - pad.x, charCY - pad.y)
+  1966→        if (dist < 18 && s.speedBoost <= 0) {
+  1967→          s.speedBoost = 120  // 2 seconds of boost
+  1968→          // Speed particles
+  1969→          for (let i = 0; i < 8; i++) {
+  1970→            particlesRef.current.push({
+  1971→              x: pad.x + (Math.random() - 0.5) * 10,
+  1972→              y: pad.y + (Math.random() - 0.5) * 6,
+  1973→              vx: (Math.random() - 0.5) * 2,
+  1974→              vy: -Math.random() * 2 - 0.5,
+  1975→              life: 25, maxLife: 25,
+  1976→              color: pad.color, size: 2,
+  1977→            })
+  1978→          }
+  1979→        }
+  1980→      }
+  1981→
+  1982→      // ── Teleporter activation ──
+  1983→      if (s.teleportCooldown <= 0) {
+  1984→        for (const tp of TELEPORTERS) {
+  1985→          const dist = Math.hypot(charCX - tp.x, charCY - tp.y)
+  1986→          if (dist < 20) {
+  1987→            const target = TELEPORTERS.find(t => t.id === tp.targetId)
+  1988→            if (target) {
+  1989→              s.charX = target.x - 10
+  1990→              s.charY = target.y - 14
+  1991→              s.teleportCooldown = 90  // 1.5 second cooldown
+  1992→              // Teleport particles at source
+  1993→              for (let i = 0; i < 15; i++) {
+  1994→                const angle = (i / 15) * Math.PI * 2
+  1995→                particlesRef.current.push({
+  1996→                  x: tp.x,
+  1997→                  y: tp.y,
+  1998→                  vx: Math.cos(angle) * 2,
+  1999→                  vy: Math.sin(angle) * 2,
+  2000→                  life: 35, maxLife: 35,
+
+[showing lines 1-2000 of 2164; use offset=2001 with limit to continue reading]
