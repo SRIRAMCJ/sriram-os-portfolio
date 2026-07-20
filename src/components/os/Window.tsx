@@ -191,7 +191,7 @@ export default function Window({
 
         {/* ─── Window Border Glow ────────────────────────────────────────────── */}
         <div
-          className="absolute inset-0 pointer-events-none transition-all duration-300"
+          className="absolute inset-0 pointer-events-none"
           style={{
             borderRadius: isMaximized ? 0 : 12,
             border: isActive
@@ -200,6 +200,7 @@ export default function Window({
             boxShadow: isActive
               ? `inset 0 0 20px ${color}08, 0 0 1px ${color}40`
               : 'none',
+            transition: 'border-color 300ms, box-shadow 300ms',
           }}
         />
 

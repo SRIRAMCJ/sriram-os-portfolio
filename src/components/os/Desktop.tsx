@@ -510,7 +510,8 @@ function SkillsSection() {
           {(currentSkills as Array<{ name: string; level: number; color: string }>).map((skill, idx) => (
             <motion.div
               key={skill.name}
-              className="relative pl-12 skill-node"
+              className="relative pl-12"
+              style={{ transition: 'transform 0.3s ease, filter 0.3s ease' }}
               initial={{ opacity: 0, x: -15 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.3, delay: idx * 0.06 }}
@@ -995,9 +996,10 @@ function StartMenu({ isOpen, onClose, onOpenWindow }: {
               {menuItems.map((item, idx) => (
                 <motion.button
                   key={item.id}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left"
                   style={{
                     color: COLORS.text,
+                    transition: 'background 150ms',
                   }}
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLElement).style.background = `${item.color}15`
@@ -1083,10 +1085,11 @@ function Taskbar({
       >
         {/* Start Button */}
         <motion.button
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg h-8 transition-all duration-150"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg h-8"
           style={{
             background: startMenuOpen ? `${COLORS.primary}20` : 'transparent',
             border: `1px solid ${startMenuOpen ? COLORS.primary + '40' : 'transparent'}`,
+            transition: 'background 150ms, border-color 150ms',
           }}
           onClick={onStartClick}
           whileHover={{ scale: 1.02 }}
@@ -1112,11 +1115,12 @@ function Taskbar({
             return (
               <motion.button
                 key={winId}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg h-8 shrink-0 transition-all duration-150"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg h-8 shrink-0"
                 style={{
                   background: isActive ? `${config.color}15` : 'rgba(148,163,184,0.05)',
                   border: `1px solid ${isActive ? config.color + '30' : 'rgba(148,163,184,0.08)'}`,
                   boxShadow: isActive ? `0 0 8px ${config.color}15` : 'none',
+                  transition: 'background 150ms, border-color 150ms, box-shadow 150ms',
                 }}
                 onClick={() => onFocusWindow(winId)}
                 whileHover={{ scale: 1.02 }}
