@@ -322,3 +322,125 @@ Vision, and Generative AI.
 │ JavaScript ██████████████░░ 85% │
 │ TypeScript ████████████░░░ 80%  │
 │ Java       ██████████░░░░░ 75%  │
+│ SQL        ████████████░░░ 80%  │
+└─────────────────────────────────┘
+┌─ AI/ML ─────────────────────────┐
+│ TensorFlow ████████████████░ 90%│
+│ PyTorch    ██████████████░░ 88% │
+│ OpenCV     █████████████░░░ 85% │
+│ LangChain  ████████████░░░ 80%  │
+│ LLMs       █████████████░░░ 85% │
+└─────────────────────────────────┘
+┌─ Web ───────────────────────────┐
+│ React      ████████████████░ 90%│
+│ Next.js    ██████████████░░ 85% │
+│ Node.js    █████████████░░░ 85% │
+│ FastAPI    ████████████████░ 90%│
+└─────────────────────────────────┘`,
+  experience: `
+📋 Work Experience:
+
+1️⃣ Madras MindWorks | AI/ML Engineer
+   Jun 2024 - Present | Chennai
+   → ML model development & deployment
+   → NLP pipelines & RAG systems
+   → 15% accuracy improvement
+
+2️⃣ HS WebForge | Full Stack Developer
+   Jan 2024 - May 2024 | Remote
+   → React & Next.js applications
+   → RESTful API development
+   → 98% client satisfaction
+
+3️⃣ Retech Solutions | Data Science
+   Aug 2023 - Dec 2023 | Chennai
+   → Predictive modeling
+   → Data visualization
+   → 80% automation achieved`,
+  projects: `
+🚀 Featured Projects:
+
+1. Tamil Handwritten OCR
+   ├─ Accuracy: 94%
+   ├─ Manual work reduced: 85%
+   ├─ Tech: TensorFlow, OpenCV, Flask
+   └─ GitHub: github.com/sriram/tamil-ocr
+
+2. Multi Hazard Disaster Detection
+   ├─ Accuracy: 92%
+   ├─ GenAI automated reporting
+   ├─ Tech: PyTorch, LangChain, FastAPI
+   └─ GitHub: github.com/sriram/disaster-detection
+
+3. Cryptocurrency Intelligence Platform
+   ├─ 500+ Assets tracked
+   ├─ Decision making improved by 60%
+   ├─ Tech: FastAPI, React, TensorFlow
+   └─ GitHub: github.com/sriram/crypto-intel`,
+  research: `
+📄 Research Publications:
+
+1. "Advanced Tamil Handwritten Character 
+   Recognition Using Deep Learning"
+   • Type: SCOPUS Indexed
+   • Year: 2024 | Citations: 8
+   • Key Result: 94% accuracy
+
+2. "Multi-Hazard Detection Using Sensor 
+   Fusion and Generative AI"
+   • Type: SCOPUS Indexed
+   • Year: 2024 | Citations: 5
+   • Key Result: 92% detection accuracy`,
+  contact: `
+📧 Email:    sriramv1592k4@gmail.com
+💼 LinkedIn: linkedin.com/in/sri-ram-v15/
+🐙 GitHub:   github.com/SRIRAMCJ
+📱 Phone:    +91 8838331680
+📍 Location: Chennai, India`,
+  whoami: `You are a visitor exploring SRIRAM.OS - the interactive AI Operating System portfolio of Sriram V. Welcome, traveler! 🚀`,
+  ls: `drwxr-xr-x  about/
+drwxr-xr-x  experience/
+drwxr-xr-x  projects/
+drwxr-xr-x  skills/
+drwxr-xr-x  research/
+drwxr-xr-x  certifications/
+drwxr-xr-x  resume/
+drwxr-xr-x  contact/
+-rw-r--r--  .secret
+-rw-r--r--  README.md`,
+  fortune: [
+    "🤖 The best way to predict the future is to invent it. - Alan Kay",
+    "🧠 AI is the new electricity. - Andrew Ng",
+    "💻 Code is like humor. When you have to explain it, it's bad. - Cory House",
+    "🚀 The only way to do great work is to love what you do. - Steve Jobs",
+    "🎯 In the middle of difficulty lies opportunity. - Albert Einstein",
+    "✨ First, solve the problem. Then, write the code. - John Johnson",
+    "🔮 The best error message is the one that never shows up. - Thomas Fuchs",
+    "🎯 Simplicity is the soul of efficiency. - Austin Freeman",
+  ],
+  ascii: `
+  ███████╗██████╗ ██╗██████╗  █████╗ ███╗   ███╗
+  ██╔════╝██╔══██╗██║██╔══██╗██╔══██╗████╗ ████║
+  ███████╗██████╔╝██║██████╔╝███████║██╔████╔██║
+  ╚════██║██╔══██╗██║██╔══██╗██╔══██║██║╚██╔╝██║
+  ███████║██║  ██║██║██║  ██║██║  ██║██║ ╚═╝ ██║
+  ╚══════╝╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝
+                .OS v2.0`,
+  sudo: `nice try! 🔒 Access denied. But here's a hint: ↑↑↓↓←→←→BA`,
+  matrix: "Initializing matrix rain... 🟢💀🐰",
+}
+
+export const buildingsData = [
+  { id: 'about', name: 'AI Lab', icon: '🤖', x: 15, y: 30, width: 120, height: 100, color: '#00E5FF', description: 'Learn about Sriram' },
+  { id: 'projects', name: 'Projects Hub', icon: '🚀', x: 45, y: 25, width: 140, height: 110, color: '#6C63FF', description: 'View projects' },
+  { id: 'experience', name: 'Experience Office', icon: '💼', x: 75, y: 35, width: 130, height: 100, color: '#FF00C8', description: 'Work experience' },
+  { id: 'skills', name: 'Skills Academy', icon: '⚡', x: 25, y: 60, width: 120, height: 100, color: '#00FF88', description: 'Technical skills' },
+  { id: 'research', name: 'Research Center', icon: '🔬', x: 55, y: 55, width: 130, height: 100, color: '#FFD700', description: 'Publications' },
+  { id: 'contact', name: 'Contact Building', icon: '📡', x: 80, y: 65, width: 120, height: 100, color: '#FF6B35', description: 'Get in touch' },
+]
+
+export const npcData = [
+  { id: 'robot', name: 'Robo', icon: '🤖', x: 35, y: 45, message: "Welcome to SRIRAM.OS! I'm Robo, your guide. Visit the buildings to explore!" },
+  { id: 'scientist', name: 'Dr. AI', icon: '👨‍🔬', x: 60, y: 40, message: "Did you know? Sriram has published SCOPUS research papers!" },
+  { id: 'engineer', name: 'Dev', icon: '👩‍💻', x: 20, y: 50, message: "Try the terminal! Press Ctrl+` or find the Terminal building." },
+]
