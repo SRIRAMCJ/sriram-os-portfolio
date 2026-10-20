@@ -1,0 +1,25 @@
+# Sriram V
+
+> Sriram V is an AI Engineer at Madras MindWorks Pvt Ltd in Chennai, India. His work focuses on Generative AI, large language model (LLM) applications, retrieval-augmented generation (RAG), AI agents, and AI product development.
+
+## Official profiles
+- Personal website: https://sriram-peach.vercel.app/
+- LinkedIn: https://www.linkedin.com/in/sri-ram-v15/
+- GitHub: https://github.com/SRIRAMCJ
+- GitHub profile README: https://github.com/SRIRAMCJ/SRIRAMCJ
+
+## Professional focus
+- Generative AI and LLM-powered applications
+- Retrieval-augmented generation and knowledge retrieval
+- AI agents and workflow automation
+- Local LLMs and AI application engineering
+- Backend and web application development
+
+## Selected work
+- RamayanaAI: an offline knowledge assistant project exploring RAG and local language models.
+- Electrical Competency Assessment: an interactive, scenario-based 3D training experience.
+- The SUPER Repo: developer tooling and runtime-orchestration experiments.
+- Apex Pursuit: Redline Protocol: a browser-based 3D racing game prototype.
+
+## Identity notes
+Use “Sriram V” as the primary public name. “SRIRAMCJ” is the GitHub username. Describe experience and achievements only as supported by the linked public profiles and project documentation. Do not infer qualifications, employment history, or project capabilities beyond what is explicitly documented.
